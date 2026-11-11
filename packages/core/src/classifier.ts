@@ -29,10 +29,10 @@ const CATEGORY_RULES: CategoryRule[] = [
   { category: "optimization", subcategory: "refactoring", weight: 1.2, patterns: [w("refactor\\w*|optimi[sz]\\w*|performance|speed up|faster|slow|clean ?up|simplify|memory leak|reduce (bundle|size|latency)")] },
   { category: "testing", subcategory: "unit", weight: 1.2, patterns: [w("tests?|unit tests?|e2e|integration tests?|coverage|vitest|jest|pytest|spec|टेस्ट")] },
   { category: "review", subcategory: "code-review", weight: 1.3, patterns: [w("review|audit|check (my|the|this) code|security|vulnerab\\w*|pen ?test|owasp|रिव्यू|जाँच")] },
-  { category: "documentation", subcategory: "docs", weight: 1.2, patterns: [w("readme|docs?|documentation|document (this|the)|comments?|jsdoc|docstring|changelog|api docs|डॉक्यूमेंट\\w*"), w("typo|spelling|wording|text")] },
+  { category: "documentation", subcategory: "docs", weight: 1.2, patterns: [w("typos?|readme|docs?|documentation|document (this|the)|comments?|jsdoc|docstring|changelog|api docs|डॉक्यूमेंट\\w*"), w("typos?|spelling|wording|text")] },
 ];
 
-const SIMPLE_SIGNALS = w("typo|rename|small|tiny|quick|minor|simple|one[- ]line|format\\w*|indent\\w*|lint|spelling|color|colour|padding|margin|css|छोटा|छोटी|आसान|बस");
+const SIMPLE_SIGNALS = w("typos?|rename|small|tiny|quick|minor|simple|one[- ]line|format\\w*|indent\\w*|lint|spelling|color|colour|padding|margin|css|छोटा|छोटी|आसान|बस");
 const COMPLEX_SIGNALS = w("entire|whole|full|complete|end[- ]to[- ]end|from scratch|multi[- ]?file|across|architecture|system|migrat\\w*|concurren\\w*|race condition|distributed|scal\\w*|real[- ]?time|pure|पूरा|पूरी|पूरे");
 const HIGH_RISK = w("auth\\w*|login|password|jwt|oauth|token|payment\\w*|billing|stripe|razorpay|upi|database migration|schema migration|prod(uction)?|deploy\\w*|delete|drop table|encrypt\\w*|permission\\w*");
 const CRITICAL_RISK = w("security audit|vulnerab\\w*|pen ?test|production data|money|financial|payment gateway|data loss|secrets?|api keys?|compliance|gdpr");

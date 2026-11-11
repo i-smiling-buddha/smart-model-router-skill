@@ -1,6 +1,7 @@
 import { estimateCost, expectedCostPerSuccess } from "./cost.js";
 import { verificationLevelsFor } from "./classifier.js";
 import { ModelRegistry } from "./registry.js";
+import { blendProbability } from "./learning.js";
 import type {
   CandidateScore,
   ModelSpec,
@@ -99,11 +100,17 @@ export class Router {
 
     const candidates: CandidateScore[] = [];
     for (const m of this.registry.all()) {
-      const p = successProbability(m, task);
-      const cost = estimateCost(m, task.estimatedContextTokens, task.estimatedOutputTokens);
+      const prior = successProbability(m, task);
+      const obs = opts.history?.lookup(m.id, task.category, task.complexity);
+      const p = blendProbability(prior, obs, opts.priorStrength);
+      // Token optimization from history: real average usage beats the complexity guess.
+      const inTok = obs?.avgInputTokens ?? task.estimatedContextTokens;
+      const outTok = obs?.avgOutputTokens ?? task.estimatedOutputTokens;
+      const cost = estimateCost(m, inTok, outTok);
       const base: CandidateScore = {
         modelId: m.id,
         successProbability: round(p, 3),
+        ...(obs ? { observed: { attempts: round(obs.attempts, 1), passRate: round(obs.passRate, 3), priorP: round(prior, 3), scope: obs.scope } } : {}),
         estimatedCost: cost,
         breakdown: { quality: 0, suitability: 0, reliability: 0, costEfficiency: 0, latency: 0, total: 0 },
       };
@@ -197,7 +204,8 @@ function explain(m: ModelSpec, t: TaskClassification, c: CandidateScore, mode: R
       : c.breakdown.costEfficiency >= 99
         ? "lowest expected cost per successful task"
         : "cheaper models are too likely to fail and need retries";
-  const base = `${lvl} ${t.category} → ${m.displayName}: ${why} (p≈${Math.round(c.successProbability * 100)}%, mode=${mode})`;
+  const learned = c.observed ? `, learned from ${c.observed.attempts} run${c.observed.attempts === 1 ? "" : "s"}` : "";
+  const base = `${lvl} ${t.category} → ${m.displayName}: ${why} (p≈${Math.round(c.successProbability * 100)}%${learned}, mode=${mode})`;
   return relaxed ? `${base}. WARNING: no model cleared the reliability floor — strongest available chosen; consider human review.` : base;
 }
 

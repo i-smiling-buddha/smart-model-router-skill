@@ -41,11 +41,21 @@
 - [ ] Verify Codex agent model names against current Codex models
 - [ ] Automatic token capture for OpenCode / Codex (plugin / hook equivalents)
 
-## Phase 4 — Optimization
-- [ ] Benchmark suite: single model vs SMR vs best model (success rate, cost, retries)
-- [ ] Replace initial-estimate scores with benchmark + observed scores
-- [ ] Adaptive ranking from history (statistical first, contextual bandit later)
-- [ ] Dashboard
+## ✅ Phase 4 — Optimization — done
+- [x] Benchmark engine: single model vs SMR vs best model — success, cost, tokens, retries, latency; verdict needs BOTH no success loss and lower cost
+- [x] Verifiers: contains / regex / json / node-test (runs code with node:assert); starter suite of 10 cases incl. Hindi
+- [x] Simulated mode for offline demos (seeded, clearly labelled, not importable unless forced)
+- [x] Learning Engine: Bayesian blend of registry prior + observed results (model × category × complexity), pooled fallback, observed token averages
+- [x] Router uses learned probabilities and token estimates; reasons say "learned from N runs"
+- [x] `smr bench --import` feeds benchmark results into learning; `smr learn` report
+- [x] Token Optimizer: relevance-ranked context packing, dedupe, compression, keyword windows, sensitive-file exclusion; output-length caps; Anthropic prompt caching
+- [x] Dashboard: self-contained HTML (light/dark), `smr dashboard` + `/dashboard`; savings vs always-best
+- [x] MCP tools `smr_pack_context`, `smr_learn`
+
+## Next
+- [ ] Contextual-bandit exploration (occasionally try a cheaper model to keep learning)
+- [ ] Usage-over-time chart in the dashboard
+- [ ] Real (non-simulated) benchmark run on the starter suite, published in docs
 
 ## Phase 5 — Release
 - [ ] Windows installer, docs, security audit, open-source release

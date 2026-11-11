@@ -1,5 +1,8 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { timingSafeEqual } from "node:crypto";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { buildDashboardData, renderDashboard, storeDirFor } from "@smr/core";
 import { ApiError, runOperation, type ApiContext } from "./api.js";
 
 /**
@@ -10,7 +13,7 @@ import { ApiError, runOperation, type ApiContext } from "./api.js";
  *   POST /tasks/classify         POST /tasks/route     POST /tasks/execute
  *   POST /tasks                  (start)               POST /tasks/evaluate
  *   POST /tasks/:id/attempts     GET  /tasks/:id/next  POST /tasks/:id/handoff
- *   GET  /tasks/:id
+ *   GET  /tasks/:id              GET  /dashboard       (HTML)
  */
 
 const MAX_BODY = 1_000_000;
@@ -37,6 +40,12 @@ export function createHttpServer(ctx: ApiContext, opts: { token?: string } = {})
       const url = new URL(req.url ?? "/", "http://localhost");
       if (req.method === "GET" && url.pathname === "/health") return send(res, 200, { ok: true, service: "smart-model-router", store: ctx.store().backend });
       if (token && !authorized(req, token)) return send(res, 401, { error: "unauthorized" });
+      if (req.method === "GET" && url.pathname === "/dashboard") {
+        const dir = join(storeDirFor(ctx.cfg), "benchmarks");
+        const benches = existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(".json")).map((f) => JSON.parse(readFileSync(join(dir, f), "utf8"))) : [];
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8", "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" });
+        return void res.end(renderDashboard(buildDashboardData(ctx.store(), ctx.registry, benches)));
+      }
 
       const taskShow = url.pathname.match(/^\/tasks\/([\w-]+)$/);
       if (req.method === "GET" && taskShow) {

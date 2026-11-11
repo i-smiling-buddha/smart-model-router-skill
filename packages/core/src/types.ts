@@ -108,6 +108,10 @@ export interface RouterOptions {
   costCeilingUsd?: number;
   /** Model ids to skip (e.g. already failed). */
   exclude?: string[];
+  /** Learning Engine: observed results blended into success probability and token estimates. */
+  history?: import("./learning.js").PerformanceHistory;
+  /** Pseudo-observations the registry prior is worth (default 8). */
+  priorStrength?: number;
 }
 
 export interface ScoreBreakdown {
@@ -125,6 +129,8 @@ export interface CandidateScore {
   estimatedCost: CostEstimate;
   breakdown: ScoreBreakdown;
   rejectedReason?: string;
+  /** Present when the Learning Engine had data for this model on this kind of task. */
+  observed?: { attempts: number; passRate: number; priorP: number; scope: "exact" | "pooled" };
 }
 
 export interface RoutingDecision {

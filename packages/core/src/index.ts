@@ -15,7 +15,9 @@ export {
 } from "./providers.js";
 export { providerBackend } from "./llm-classifier.js";
 export { executeTask, defaultVerifier, type Verifier, type ExecuteResult, type ExecuteEvent } from "./executor.js";
-export { loadConfig, registryFor, policyFor, routerOptsFor, storeDirFor, type SmrConfig } from "./config.js";
+export { loadConfig, registryFor, policyFor, routerOptsFor, storeDirFor, historyFor, type SmrConfig } from "./config.js";
+export { buildHistory, blendProbability, DEFAULT_LEARNING, type PerformanceHistory, type Observation, type LearningOptions, type LearningRow } from "./learning.js";
+export type { PerformanceRow } from "./store.js";
 export { usageFromTranscript, readTranscript, SMR_AGENT_MODELS, type SubagentStopInput, type TranscriptUsage } from "./hooks.js";
 
 import { classifyTask } from "./classifier.js";
@@ -29,3 +31,7 @@ export function routeTask(task: string, opts: RouterOptions & { registry?: Model
   const decision = new Router(opts.registry ?? new ModelRegistry()).route(classification, opts);
   return { classification, decision };
 }
+export { packContext, collectFiles, compressText, estimateTokens, keywords, suggestMaxTokens, type ContextFile, type PackResult, type PackedFile } from "./optimizer.js";
+export { runBenchmark, verifierFor, extractCode, simulatedProviders, importBenchmark, parseStrategy, strategyName, type BenchmarkSuite, type BenchmarkCase, type BenchmarkReport, type CaseResult, type StrategySummary, type Comparison, type Strategy, type VerifySpec } from "./benchmark.js";
+export { learningReport, estimateSavings, syntheticTask, type SavingsEstimate } from "./insights.js";
+export { buildDashboardData, renderDashboard, type DashboardData } from "./dashboard.js";

@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { z } from "zod";
 import {
   anthropicBackend,
@@ -15,7 +17,15 @@ import {
   routerOptsFor,
   storeDirFor,
   TaskSession,
+  historyFor,
+  learningReport,
+  packContext,
+  collectFiles,
+  type ContextFile,
   type ExecutionStore,
+  type HostId,
+  type RouterOptions,
+  type RoutingMode,
   type SmrConfig,
   type TaskClassification,
 } from "@smr/core";
@@ -30,16 +40,20 @@ export interface ApiContext {
   registry: ModelRegistry;
   providers: ProviderRegistry;
   store(): ExecutionStore;
+  /** Router options incl. Learning Engine history from the log. */
+  routing(overrides?: { mode?: RoutingMode; host?: HostId }): RouterOptions & { host: HostId };
   cwd: string;
 }
 
 export function createContext(cfg: SmrConfig, opts: { registry?: ModelRegistry; providers?: ProviderRegistry; store?: ExecutionStore; cwd?: string } = {}): ApiContext {
   let store = opts.store;
+  const getStore = () => (store ??= openStore(storeDirFor(cfg)));
   return {
     cfg,
     registry: opts.registry ?? new ModelRegistry(),
     providers: opts.providers ?? ProviderRegistry.defaults(),
-    store: () => (store ??= openStore(storeDirFor(cfg))),
+    store: getStore,
+    routing: (o = {}) => ({ ...routerOptsFor(cfg, o), history: historyFor(cfg, getStore()) }),
     cwd: opts.cwd ?? process.cwd(),
   };
 }
@@ -73,7 +87,7 @@ async function classify(ctx: ApiContext, task: string, llm?: boolean): Promise<T
 }
 
 const session = (ctx: ApiContext, host?: string) =>
-  new TaskSession(ctx.store(), ctx.registry, policyFor(ctx.cfg), (host ?? ctx.cfg.host ?? "generic") as any, routerOptsFor(ctx.cfg, { host: host as any }));
+  new TaskSession(ctx.store(), ctx.registry, policyFor(ctx.cfg), (host ?? ctx.cfg.host ?? "generic") as HostId, ctx.routing({ host: host as HostId | undefined }));
 
 function op<S extends z.ZodTypeAny>(o: Operation<S>): Operation<S> { return o; }
 
@@ -85,7 +99,7 @@ export const OPERATIONS = [
     jsonSchema: obj({ task: str("The task in the user's words"), mode: { type: "string", enum: ["smart", "economy", "quality"] }, host: { type: "string", enum: ["claude-code", "opencode", "codex", "generic"] }, llm: { type: "boolean" } }, ["task"]),
     async run(ctx, i) {
       const c = await classify(ctx, i.task, i.llm);
-      const d = new Router(ctx.registry).route(c, routerOptsFor(ctx.cfg, { mode: i.mode, host: i.host }));
+      const d = new Router(ctx.registry).route(c, ctx.routing({ mode: i.mode, host: i.host }));
       return { classification: c, decision: { ...d, candidates: undefined } };
     },
   }),
@@ -162,7 +176,7 @@ export const OPERATIONS = [
     async run(ctx, i) {
       return executeTask(i.task, await classify(ctx, i.task), {
         store: ctx.store(), providers: ctx.providers, registry: ctx.registry,
-        policy: policyFor(ctx.cfg), router: routerOptsFor(ctx.cfg), system: i.system,
+        policy: policyFor(ctx.cfg), router: ctx.routing(), system: i.system,
       });
     },
   }),
@@ -187,6 +201,27 @@ export const OPERATIONS = [
         recentTasks: s.listTasks(i.limit ?? 10).map((t) => ({ id: t.id, status: t.status, category: t.category, routedTo: t.decision.selectedModel, text: t.text.slice(0, 120), createdAt: t.createdAt })),
       };
     },
+  }),
+  op({
+    name: "smr_pack_context",
+    description: "Token optimizer: pick only the files relevant to a task, dedupe, compress, and pack them under a token budget (big files reduced to the relevant parts). Sensitive files (.env, keys) are never included.",
+    input: z.object({ task: z.string().min(1), dirs: z.array(z.string()).optional(), files: z.array(z.string()).optional(), budgetTokens: z.number().int().positive().max(200_000).optional() }),
+    jsonSchema: obj({ task: str("The task"), dirs: { type: "array", items: { type: "string" }, description: "Folders to scan (relative to the project)" }, files: { type: "array", items: { type: "string" } }, budgetTokens: { type: "integer" } }, ["task"]),
+    async run(ctx, i) {
+      const files: ContextFile[] = [];
+      const inside = (p: string) => { const full = resolve(ctx.cwd, p); if (!full.startsWith(resolve(ctx.cwd))) throw new Error(`path outside project: ${p}`); return full; };
+      for (const d of i.dirs ?? ["."]) files.push(...collectFiles(inside(d)).map((f) => ({ ...f, path: d === "." ? f.path : `${d.replace(/\/$/, "")}/${f.path}` })));
+      for (const f of i.files ?? []) { const full = inside(f); if (existsSync(full)) files.push({ path: f, content: readFileSync(full, "utf8") }); }
+      const r = packContext(i.task, files, i.budgetTokens ?? ctx.cfg.optimizer?.contextBudgetTokens ?? 8_000);
+      return { markdown: r.markdown, files: r.files.map(({ content, ...f }) => f), dropped: r.dropped, tokensBefore: r.tokensBefore, tokensAfter: r.tokensAfter, savedPct: r.savedPct };
+    },
+  }),
+  op({
+    name: "smr_learn",
+    description: "Learning Engine view: per model × task type, the registry prior, the observed pass rate and the blended probability the router now uses.",
+    input: z.object({}).passthrough(),
+    jsonSchema: obj({}),
+    run: async (ctx) => learningReport(ctx.store(), ctx.registry, ctx.cfg.learning),
   }),
 ] as const satisfies readonly Operation[];
 
