@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { cpSync, existsSync, readFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -9,20 +9,29 @@ import {
   decideNext,
   detectChecks,
   evaluate,
+  executeTask,
   formatCost,
-  ModelRegistry,
+  loadConfig as loadSmrConfig,
   openStore,
+  ProviderRegistry,
+  providerBackend,
+  readTranscript,
+  registryFor,
   Router,
+  SMR_AGENT_MODELS,
   TaskSession,
+  usageFromTranscript,
   DEFAULT_POLICY,
   type AttemptRecord,
-  type CheckCommand,
   type EscalationDecision,
   type ExecutionStore,
   type HostId,
   type RoutingMode,
+  type SmrConfig,
+  type SubagentStopInput,
   type TaskClassification,
 } from "@smr/core";
+import { createContext, runMcpStdio, startHttpServer } from "@smr/server";
 
 const HELP = `smr — Smart Model Router  (use the cheapest model that can reliably do the job)
 
@@ -43,9 +52,18 @@ Quality:
   smr verify [<id>] [--task "<task>"] [--model <m>] [--cwd dir]
       runs static/functional checks the task needs; with <id> + --model it records the attempt
 
+Direct execution (custom agents / non-agentic tasks — calls the provider API itself):
+  smr exec "<task>" [--system "..."] [--json]      route → call → verify → escalate, usage logged
+      keys from env: ANTHROPIC_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY, GEMINI_API_KEY; Ollama: OLLAMA_HOST
+
+Universal integration:
+  smr mcp                                         MCP server over stdio (Claude Code, OpenCode, Codex, Cursor...)
+  smr serve [--port 4317]                         local HTTP API on 127.0.0.1 (optional SMR_API_TOKEN)
+  smr hook subagent-stop                          Claude Code SubagentStop hook: captures subagent token usage
+
 Reporting / setup:
   smr report [--json]
-  smr init <claude-code|opencode> [targetDir]
+  smr init <claude-code|opencode|codex> [targetDir]
 
 Options:
   --registry <file>   custom registry JSON (merged over defaults)
@@ -74,27 +92,21 @@ function parseArgs(argv: string[]): { positional: string[]; flags: Flags } {
   return { positional, flags };
 }
 
-interface SmrConfig {
-  mode?: RoutingMode;
-  host?: HostId;
-  approval?: "auto" | "confirm" | "recommend";
-  registryPath?: string;
-  storeDir?: string;
-  maxRetriesPerModel?: number;
-  maxEscalations?: number;
-  costCeilingUsd?: number;
-  minSuccessProbability?: number;
-  checks?: CheckCommand[];
-  llmClassifier?: { enabled?: boolean; model?: string; threshold?: number };
-}
-
 const str = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined);
 const num = (v: unknown): number | undefined => (typeof v === "string" && v.trim() !== "" && !isNaN(Number(v)) ? Number(v) : undefined);
 
 function loadConfig(flags: Flags): SmrConfig {
-  const path = str(flags.config) ?? "smr.config.json";
-  if (!existsSync(path)) return {};
-  return JSON.parse(readFileSync(path, "utf8")) as SmrConfig;
+  return loadSmrConfig(str(flags.config) ?? "smr.config.json");
+}
+
+function readStdin(): Promise<string> {
+  return new Promise((resolve) => {
+    if (process.stdin.isTTY) return resolve("");
+    let data = "";
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", (c) => (data += c));
+    process.stdin.on("end", () => resolve(data));
+  });
 }
 
 async function main(): Promise<void> {
@@ -103,8 +115,7 @@ async function main(): Promise<void> {
   if (!cmd || cmd === "help" || cmd === "--help" || flags.help) { console.log(HELP); return; }
 
   const cfg = loadConfig(flags);
-  const registryPath = str(flags.registry) ?? cfg.registryPath;
-  const registry = registryPath ? ModelRegistry.fromFile(registryPath, { merge: true }) : new ModelRegistry();
+  const registry = registryFor(cfg, str(flags.registry));
   const mode = (str(flags.mode) ?? cfg.mode ?? "smart") as RoutingMode;
   const host = (str(flags.host) ?? cfg.host ?? "generic") as HostId;
   const json = !!flags.json;
@@ -123,7 +134,8 @@ async function main(): Promise<void> {
     const useLlm = !!flags.llm || !!cfg.llmClassifier?.enabled;
     if (!useLlm) return classifyTask(text);
     let backend;
-    try { backend = anthropicBackend({ model: cfg.llmClassifier?.model }); }
+    const llmModel = cfg.llmClassifier?.model ?? "claude-haiku-5-5";
+    try { backend = llmModel.includes("/") ? providerBackend(ProviderRegistry.defaults(), llmModel) : anthropicBackend({ model: llmModel }); }
     catch (e) { console.error(`smr: ${(e as Error).message} — using rule-based classification`); return classifyTask(text); }
     return classifyWithFallback(text, { backend, threshold: cfg.llmClassifier?.threshold, cache: getStore() });
   };
@@ -261,15 +273,71 @@ async function main(): Promise<void> {
         });
         return;
       }
+      case "exec": {
+        const text = need(positional.join(" "));
+        const r = await executeTask(text, await classify(text), {
+          store: getStore(), providers: ProviderRegistry.defaults(), registry, policy, host, router: routerOpts,
+          system: str(flags.system),
+          onEvent: json ? undefined : (e) => {
+            if (e.type === "attempt") console.error(`  ${e.passed ? "✓" : "✗"} ${e.modelId}  in ${e.inputTokens} / out ${e.outputTokens}${e.reason ? "  " + e.reason : ""}`);
+            if (e.type === "error") console.error(`  ✗ ${e.modelId}  ${e.reason}`);
+          },
+        });
+        out(r, () => r.output ?? `smr: task ${r.taskId} ${r.status} — ${r.reason}`);
+        if (!r.output) process.exitCode = 2;
+        return;
+      }
+      case "mcp": {
+        // stdout belongs to the protocol — never console.log here.
+        await runMcpStdio(createContext(cfg, { registry }));
+        return;
+      }
+      case "serve": {
+        const port = num(flags.port) ?? cfg.server?.port ?? 4317;
+        const { url } = await startHttpServer(createContext(cfg, { registry }), port);
+        console.log(`SMR API listening on ${url}  (Ctrl+C to stop)${process.env.SMR_API_TOKEN ? "  [token auth on]" : ""}`);
+        await new Promise(() => {}); // run until killed
+        return;
+      }
+      case "hook": {
+        // Hooks must NEVER break the host session: always exit 0, report problems on stderr.
+        if (positional[0] !== "subagent-stop") { console.error(`smr hook: unknown hook "${positional[0]}"`); return; }
+        try {
+          const input = JSON.parse((await readStdin()) || "{}") as SubagentStopInput;
+          const agent = input.agent_type ?? "";
+          const transcript = readTranscript(input.agent_transcript_path);
+          const usage = transcript ? usageFromTranscript(transcript) : undefined;
+          const modelRef = (usage?.model && registry.get(usage.model)?.id) || SMR_AGENT_MODELS[agent];
+          if (!modelRef || !usage || (!usage.inputTokens && !usage.outputTokens)) return;
+          new TaskSession(getStore(), registry, policy, host, routerOpts).addPendingUsage(modelRef, usage.inputTokens, usage.outputTokens);
+        } catch (e) {
+          console.error(`smr hook: ${(e as Error).message}`);
+        }
+        return;
+      }
       case "init": {
         const target = positional[0];
-        if (target !== "claude-code" && target !== "opencode") fail("usage: smr init <claude-code|opencode> [targetDir]");
+        if (target !== "claude-code" && target !== "opencode" && target !== "codex") fail("usage: smr init <claude-code|opencode|codex> [targetDir]");
         const dest = resolve(positional[1] ?? ".");
         const here = dirname(fileURLToPath(import.meta.url));
         const src = join(here, "..", "..", "..", "integrations", target);
         if (!existsSync(src)) fail(`integration templates not found at ${src}`);
-        cpSync(src, dest, { recursive: true, force: false, errorOnExist: false });
-        console.log(`Installed SMR ${target} integration into ${dest}\nTip: add ".smr/" to your .gitignore (local execution log).`);
+        const created: string[] = [];
+        const skipped: string[] = [];
+        const walk = (rel: string) => {
+          const from = join(src, rel);
+          if (statSync(from).isDirectory()) { for (const n of readdirSync(from)) walk(join(rel, n)); return; }
+          const to = join(dest, rel);
+          if (existsSync(to)) { skipped.push(rel); return; }
+          mkdirSync(dirname(to), { recursive: true });
+          cpSync(from, to);
+          created.push(rel);
+        };
+        walk("");
+        console.log(`SMR ${target} integration → ${dest}`);
+        created.forEach((f) => console.log(`  + ${f}`));
+        skipped.forEach((f) => console.log(`  = ${f}  (already exists — not overwritten; merge the SMR part by hand)`));
+        console.log(`\nNext: make "smr" available on PATH (npm link -w @smr/cli), and add ".smr/" to .gitignore.`);
         return;
       }
       default:

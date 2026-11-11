@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { classifyTask } from "./classifier.js";
+import { anthropicProvider, ProviderRegistry } from "./providers.js";
 import { TASK_CATEGORIES, type Complexity, type RiskLevel, type TaskClassification } from "./types.js";
 
 /**
@@ -101,26 +102,23 @@ export async function classifyWithFallback(
 }
 
 /**
- * Anthropic Messages API backend. The key is read from the environment and is never logged
- * or included in any prompt.
+ * Classifier backend on top of ANY provider adapter. `modelId` is a registry id such as
+ * "anthropic/claude-haiku-5-5", "openrouter/vendor/model" or "ollama/qwen3".
  */
+export function providerBackend(providers: ProviderRegistry, modelId: string, timeoutMs = 20_000): LlmBackend {
+  providers.resolve(modelId); // fail fast on unknown provider
+  return {
+    name: modelId,
+    async complete(prompt: string): Promise<string> {
+      return (await providers.complete(modelId, { prompt, maxTokens: 150, timeoutMs })).text;
+    },
+  };
+}
+
+/** Anthropic backend (key from ANTHROPIC_API_KEY — never logged or put in a prompt). */
 export function anthropicBackend(opts: { apiKey?: string; model?: string; baseUrl?: string; timeoutMs?: number } = {}): LlmBackend {
   const apiKey = opts.apiKey ?? process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set (needed for LLM classification).");
-  const model = opts.model ?? "claude-haiku-5-5";
-  const baseUrl = (opts.baseUrl ?? "https://api.anthropic.com").replace(/\/$/, "");
-  return {
-    name: `anthropic/${model}`,
-    async complete(prompt: string): Promise<string> {
-      const res = await fetch(`${baseUrl}/v1/messages`, {
-        method: "POST",
-        headers: { "content-type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
-        body: JSON.stringify({ model, max_tokens: 150, messages: [{ role: "user", content: prompt }] }),
-        signal: AbortSignal.timeout(opts.timeoutMs ?? 20_000),
-      });
-      if (!res.ok) throw new Error(`Anthropic API ${res.status}`);
-      const body = (await res.json()) as { content?: { type: string; text?: string }[] };
-      return body.content?.filter((c) => c.type === "text").map((c) => c.text ?? "").join("") ?? "";
-    },
-  };
+  const providers = new ProviderRegistry([anthropicProvider({ apiKey, baseUrl: opts.baseUrl })]);
+  return providerBackend(providers, `anthropic/${opts.model ?? "claude-haiku-5-5"}`, opts.timeoutMs);
 }

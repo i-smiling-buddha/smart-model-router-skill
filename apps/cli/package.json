@@ -1,6 +1,6 @@
 {
   "name": "@smr/cli",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "smr — Smart Model Router command line",
   "type": "module",
   "bin": {
@@ -10,7 +10,8 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@smr/core": "0.2.0"
+    "@smr/core": "0.3.0",
+    "@smr/server": "0.3.0"
   },
   "license": "MIT"
 }

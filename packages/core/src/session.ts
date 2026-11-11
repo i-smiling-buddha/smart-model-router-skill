@@ -32,6 +32,11 @@ export class TaskSession {
     a: { model: string; passed: boolean; failureReason?: string; inputTokens?: number; outputTokens?: number; durationMs?: number },
   ): { attempt: AttemptRow; next: EscalationDecision } {
     const model = this.registry.require(a.model);
+    // Usage captured by a host hook (e.g. Claude Code SubagentStop) is attached to this attempt.
+    if (a.inputTokens === undefined && a.outputTokens === undefined) {
+      const pending = this.takePendingUsage(model.id);
+      if (pending) a = { ...a, inputTokens: pending.inputTokens, outputTokens: pending.outputTokens };
+    }
     let costUsd: number | undefined;
     let costUnits: number | undefined;
     if (a.inputTokens !== undefined || a.outputTokens !== undefined) {
@@ -60,7 +65,7 @@ export class TaskSession {
       rec.attempts.map((x) => ({ modelId: x.modelId, passed: x.passed, failureReason: x.failureReason, costUsd: x.costUsd })),
       this.registry,
       this.policy,
-      { host: this.host, router: this.routerOpts },
+      { host: rec.task.decision.host ?? this.host, router: this.routerOpts },
     );
   }
 
@@ -75,6 +80,25 @@ export class TaskSession {
       expectedOutput: extra.expectedOutput ?? task.classification.successCriteria.join("; "),
       failureHistory: attempts.filter((a) => !a.passed).map((a) => ({ modelId: a.modelId, reason: a.failureReason ?? "verification failed" })),
     });
+  }
+
+  /** Accumulate tokens reported by a host hook until the next attempt for that model is recorded. */
+  addPendingUsage(modelIdOrAlias: string, inputTokens: number, outputTokens: number): void {
+    const id = this.registry.require(modelIdOrAlias).id;
+    const key = `pending-usage:${id}`;
+    const prev = this.store.cacheGet(key);
+    const cur = prev ? (JSON.parse(prev) as { inputTokens: number; outputTokens: number }) : { inputTokens: 0, outputTokens: 0 };
+    this.store.cacheSet(key, JSON.stringify({ inputTokens: cur.inputTokens + inputTokens, outputTokens: cur.outputTokens + outputTokens }));
+  }
+
+  private takePendingUsage(modelId: string): { inputTokens: number; outputTokens: number } | undefined {
+    const key = `pending-usage:${modelId}`;
+    const raw = this.store.cacheGet(key);
+    if (!raw) return undefined;
+    const v = JSON.parse(raw) as { inputTokens: number; outputTokens: number };
+    if (!v.inputTokens && !v.outputTokens) return undefined;
+    this.store.cacheSet(key, JSON.stringify({ inputTokens: 0, outputTokens: 0 }));
+    return v;
   }
 
   private require(taskId: string) {

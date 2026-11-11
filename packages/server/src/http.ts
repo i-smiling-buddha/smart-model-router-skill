@@ -1,0 +1,100 @@
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { timingSafeEqual } from "node:crypto";
+import { ApiError, runOperation, type ApiContext } from "./api.js";
+
+/**
+ * Local HTTP API (generic adapter for custom agents, scripts, dashboards).
+ * Binds to 127.0.0.1 only. Optional bearer token via SMR_API_TOKEN.
+ *
+ *   GET  /health                 GET  /models          GET /usage  (alias /analytics)
+ *   POST /tasks/classify         POST /tasks/route     POST /tasks/execute
+ *   POST /tasks                  (start)               POST /tasks/evaluate
+ *   POST /tasks/:id/attempts     GET  /tasks/:id/next  POST /tasks/:id/handoff
+ *   GET  /tasks/:id
+ */
+
+const MAX_BODY = 1_000_000;
+
+type Route = { method: string; pattern: RegExp; op: string; build: (m: RegExpMatchArray, body: any) => unknown };
+
+const ROUTES: Route[] = [
+  { method: "GET", pattern: /^\/models$/, op: "smr_models", build: () => ({}) },
+  { method: "GET", pattern: /^\/(usage|analytics)$/, op: "smr_report", build: () => ({}) },
+  { method: "POST", pattern: /^\/tasks\/classify$/, op: "smr_classify", build: (_m, b) => b },
+  { method: "POST", pattern: /^\/tasks\/route$/, op: "smr_route", build: (_m, b) => b },
+  { method: "POST", pattern: /^\/tasks\/execute$/, op: "smr_execute", build: (_m, b) => b },
+  { method: "POST", pattern: /^\/tasks\/evaluate$/, op: "smr_verify", build: (_m, b) => b },
+  { method: "POST", pattern: /^\/tasks$/, op: "smr_task_start", build: (_m, b) => b },
+  { method: "POST", pattern: /^\/tasks\/([\w-]+)\/attempts$/, op: "smr_task_attempt", build: (m, b) => ({ ...b, taskId: m[1] }) },
+  { method: "GET", pattern: /^\/tasks\/([\w-]+)\/next$/, op: "smr_task_next", build: (m) => ({ taskId: m[1] }) },
+  { method: "POST", pattern: /^\/tasks\/([\w-]+)\/handoff$/, op: "smr_task_handoff", build: (m, b) => ({ ...b, taskId: m[1] }) },
+];
+
+export function createHttpServer(ctx: ApiContext, opts: { token?: string } = {}): Server {
+  const token = opts.token ?? process.env.SMR_API_TOKEN;
+  return createServer(async (req, res) => {
+    try {
+      const url = new URL(req.url ?? "/", "http://localhost");
+      if (req.method === "GET" && url.pathname === "/health") return send(res, 200, { ok: true, service: "smart-model-router", store: ctx.store().backend });
+      if (token && !authorized(req, token)) return send(res, 401, { error: "unauthorized" });
+
+      const taskShow = url.pathname.match(/^\/tasks\/([\w-]+)$/);
+      if (req.method === "GET" && taskShow) {
+        const rec = ctx.store().getTask(taskShow[1]!);
+        return rec ? send(res, 200, rec) : send(res, 404, { error: "task not found" });
+      }
+
+      for (const r of ROUTES) {
+        const m = url.pathname.match(r.pattern);
+        if (!m || r.method !== req.method) continue;
+        const body = req.method === "POST" ? await readJson(req) : {};
+        return send(res, 200, await runOperation(ctx, r.op, r.build(m, body)));
+      }
+      send(res, 404, { error: `no route for ${req.method} ${url.pathname}` });
+    } catch (e) {
+      const status = e instanceof ApiError ? e.status : /unknown task id|Unknown task id/.test((e as Error).message) ? 404 : 500;
+      send(res, status, { error: (e as Error).message });
+    }
+  });
+}
+
+export function startHttpServer(ctx: ApiContext, port = 4317, host = "127.0.0.1"): Promise<{ server: Server; url: string }> {
+  const server = createHttpServer(ctx);
+  return new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(port, host, () => {
+      const addr = server.address();
+      const p = typeof addr === "object" && addr ? addr.port : port;
+      resolve({ server, url: `http://${host}:${p}` });
+    });
+  });
+}
+
+function authorized(req: IncomingMessage, token: string): boolean {
+  const got = (req.headers.authorization ?? "").replace(/^Bearer\s+/i, "");
+  const a = Buffer.from(got);
+  const b = Buffer.from(token);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+function readJson(req: IncomingMessage): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    let size = 0;
+    const chunks: Buffer[] = [];
+    req.on("data", (c: Buffer) => {
+      size += c.length;
+      if (size > MAX_BODY) { reject(new ApiError(413, "body too large")); req.destroy(); return; }
+      chunks.push(c);
+    });
+    req.on("end", () => {
+      if (!chunks.length) return resolve({});
+      try { resolve(JSON.parse(Buffer.concat(chunks).toString("utf8"))); } catch { reject(new ApiError(400, "invalid JSON body")); }
+    });
+    req.on("error", reject);
+  });
+}
+
+function send(res: ServerResponse, status: number, body: unknown) {
+  res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
+  res.end(JSON.stringify(body));
+}

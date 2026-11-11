@@ -9,6 +9,14 @@ export { evaluate, detectChecks, shellRunner, type CheckCommand, type CheckResul
 export { openStore, JsonStore, SqliteStore, newTaskId, type ExecutionStore, type TaskRecord, type AttemptRow, type ModelStats, type TaskStatus } from "./store.js";
 export { classifyWithFallback, anthropicBackend, buildClassifierPrompt, parseLlmAnswer, type LlmBackend, type ClassificationCache } from "./llm-classifier.js";
 export { TaskSession } from "./session.js";
+export {
+  ProviderRegistry, ProviderError, anthropicProvider, openAICompatibleProvider, googleProvider,
+  type ProviderAdapter, type CompletionRequest, type CompletionResult, type FetchLike,
+} from "./providers.js";
+export { providerBackend } from "./llm-classifier.js";
+export { executeTask, defaultVerifier, type Verifier, type ExecuteResult, type ExecuteEvent } from "./executor.js";
+export { loadConfig, registryFor, policyFor, routerOptsFor, storeDirFor, type SmrConfig } from "./config.js";
+export { usageFromTranscript, readTranscript, SMR_AGENT_MODELS, type SubagentStopInput, type TranscriptUsage } from "./hooks.js";
 
 import { classifyTask } from "./classifier.js";
 import { ModelRegistry } from "./registry.js";

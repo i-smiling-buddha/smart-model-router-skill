@@ -1,0 +1,10 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "smr": {
+      "type": "local",
+      "command": ["smr", "mcp"],
+      "enabled": true
+    }
+  }
+}

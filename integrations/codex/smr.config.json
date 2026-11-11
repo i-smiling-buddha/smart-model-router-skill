@@ -1,0 +1,27 @@
+{
+  "mode": "smart",
+  "host": "codex",
+  "approval": "auto",
+  "maxRetriesPerModel": 2,
+  "maxEscalations": 2,
+  "minSuccessProbability": 0.6,
+  "storeDir": ".smr",
+  "llmClassifier": {
+    "enabled": false,
+    "model": "claude-haiku-5-5",
+    "threshold": 0.6
+  },
+  "checks_example": [
+    {
+      "name": "typecheck",
+      "command": "npx tsc --noEmit",
+      "level": "static"
+    },
+    {
+      "name": "test",
+      "command": "npm test",
+      "level": "functional",
+      "timeoutMs": 300000
+    }
+  ]
+}
