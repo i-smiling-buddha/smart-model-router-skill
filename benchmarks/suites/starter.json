@@ -1,0 +1,71 @@
+{
+  "name": "starter",
+  "description": "10 mixed tasks (docs, small fixes, coding, debugging, planning, review, Hindi). Coding cases are verified by actually running the code with node:assert.",
+  "cases": [
+    {
+      "id": "docs-readme-intro",
+      "task": "Write a short README introduction (one paragraph) for a CLI tool called smr that routes coding tasks to the cheapest AI model that can do them.",
+      "verify": { "type": "contains", "values": ["smr"] }
+    },
+    {
+      "id": "typo-fix",
+      "task": "Fix the typos in this sentence and reply with only the corrected sentence: 'Teh quick brown fox jumsp over the lazy dog.'",
+      "verify": { "type": "contains", "values": ["The quick brown fox jumps over the lazy dog"] }
+    },
+    {
+      "id": "json-package",
+      "task": "Return only a JSON object (no prose) with keys name, version and license for a package named smr, version 1.0.0, MIT license.",
+      "verify": { "type": "json", "requiredKeys": ["name", "version", "license"] }
+    },
+    {
+      "id": "js-palindrome",
+      "task": "Write a JavaScript function isPalindrome(s) that ignores case, spaces and punctuation. Reply with the function in a js code block.",
+      "verify": {
+        "type": "node-test",
+        "test": "import assert from 'node:assert';\nassert.strictEqual(isPalindrome('Racecar'), true);\nassert.strictEqual(isPalindrome('A man, a plan, a canal: Panama'), true);\nassert.strictEqual(isPalindrome('hello'), false);\nassert.strictEqual(isPalindrome(''), true);"
+      }
+    },
+    {
+      "id": "debug-sum-nan",
+      "task": "This JavaScript function should return the sum of an array but returns NaN: function sum(a){let t;for(const x of a)t+=x;return t}. Fix the bug and reply with the corrected function named sum in a js code block.",
+      "verify": {
+        "type": "node-test",
+        "test": "import assert from 'node:assert';\nassert.strictEqual(sum([1,2,3]), 6);\nassert.strictEqual(sum([]), 0);\nassert.strictEqual(sum([-1, 1.5]), 0.5);"
+      }
+    },
+    {
+      "id": "js-email-validator",
+      "task": "Write a JavaScript function isValidEmail(s) that returns true for normal addresses like a.b+tag@example.co.in and false for strings without exactly one @, with spaces, or without a dot in the domain. Reply with the function in a js code block.",
+      "verify": {
+        "type": "node-test",
+        "test": "import assert from 'node:assert';\nassert.strictEqual(isValidEmail('a.b+tag@example.co.in'), true);\nassert.strictEqual(isValidEmail('user@site.com'), true);\nassert.strictEqual(isValidEmail('no-at-sign.com'), false);\nassert.strictEqual(isValidEmail('a@@b.com'), false);\nassert.strictEqual(isValidEmail('a b@c.com'), false);\nassert.strictEqual(isValidEmail('a@localhost'), false);"
+      }
+    },
+    {
+      "id": "js-lru-cache",
+      "task": "Implement a JavaScript function createLRU(capacity) that returns an object with get(key) (returns the value or undefined) and put(key, value), evicting the least recently used key when over capacity. get counts as use. Reply with the code in a js code block.",
+      "verify": {
+        "type": "node-test",
+        "test": "import assert from 'node:assert';\nconst c = createLRU(2);\nc.put('a', 1); c.put('b', 2);\nassert.strictEqual(c.get('a'), 1);\nc.put('c', 3);\nassert.strictEqual(c.get('b'), undefined);\nassert.strictEqual(c.get('a'), 1);\nassert.strictEqual(c.get('c'), 3);\nc.put('a', 10); c.put('d', 4);\nassert.strictEqual(c.get('c'), undefined);\nassert.strictEqual(c.get('a'), 10);"
+      }
+    },
+    {
+      "id": "plan-url-shortener",
+      "task": "Plan the architecture for a URL shortener service: list the main components, the data store, and how you would scale reads.",
+      "verify": { "type": "contains", "values": ["database", "cache", "redis", "storage"] }
+    },
+    {
+      "id": "review-sql-injection",
+      "task": "Review this Express route for security issues and name the main vulnerability: app.get('/user', (req, res) => db.query('SELECT * FROM users WHERE id=' + req.query.id).then(r => res.json(r)))",
+      "verify": { "type": "regex", "pattern": "sql\\s*injection|paramet", "flags": "i" }
+    },
+    {
+      "id": "hindi-fizzbuzz",
+      "task": "एक JavaScript function fizzBuzz(n) लिखो जो 1 से n तक का array लौटाए: 3 से भाग होने पर 'Fizz', 5 से 'Buzz', दोनों से 'FizzBuzz', नहीं तो number. js code block में जवाब दो।",
+      "verify": {
+        "type": "node-test",
+        "test": "import assert from 'node:assert';\nassert.deepStrictEqual(fizzBuzz(5), [1, 2, 'Fizz', 4, 'Buzz']);\nassert.strictEqual(fizzBuzz(15)[14], 'FizzBuzz');\nassert.strictEqual(fizzBuzz(15).length, 15);"
+      }
+    }
+  ]
+}

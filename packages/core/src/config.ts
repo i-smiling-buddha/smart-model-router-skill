@@ -3,6 +3,8 @@ import { resolve } from "node:path";
 import type { CheckCommand } from "./evaluator.js";
 import { DEFAULT_POLICY } from "./escalation.js";
 import { ModelRegistry } from "./registry.js";
+import { buildHistory, type LearningOptions, type PerformanceHistory } from "./learning.js";
+import type { ExecutionStore } from "./store.js";
 import type { EscalationPolicy, HostId, RouterOptions, RoutingMode } from "./types.js";
 
 export interface SmrConfig {
@@ -18,6 +20,10 @@ export interface SmrConfig {
   checks?: CheckCommand[];
   llmClassifier?: { enabled?: boolean; model?: string; threshold?: number };
   server?: { port?: number };
+  /** Learning Engine (adaptive ranking from the execution log). On by default. */
+  learning?: LearningOptions & { enabled?: boolean };
+  /** Token optimizer defaults. */
+  optimizer?: { contextBudgetTokens?: number };
 }
 
 export function loadConfig(path = "smr.config.json"): SmrConfig {
@@ -52,3 +58,10 @@ export function routerOptsFor(cfg: SmrConfig, overrides: { mode?: RoutingMode; h
 }
 
 export const storeDirFor = (cfg: SmrConfig) => resolve(cfg.storeDir ?? ".smr");
+
+/** Build the Learning Engine history from the store (undefined when disabled or empty). */
+export function historyFor(cfg: SmrConfig, store: ExecutionStore): PerformanceHistory | undefined {
+  if (cfg.learning?.enabled === false) return undefined;
+  const h = buildHistory(store.performanceStats(), cfg.learning);
+  return h.size > 0 ? h : undefined;
+}

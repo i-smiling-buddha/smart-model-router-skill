@@ -8,8 +8,59 @@ SMR हर coding task को समझता है, उसके लिए स
 fail होने पर ही stronger model पर जाता है। लक्ष्य है **Minimum Cost per Successful Task** —
 सिर्फ minimum cost per token नहीं।
 
-**Status:** Phase 3 (Universal Integration) — Claude Code, OpenCode, Codex, किसी भी MCP host,
+**Status:** Phase 4 (Optimization) — Benchmark engine, Learning Engine (history से adaptive
+ranking), Token Optimizer और Dashboard ready। Claude Code, OpenCode, Codex, किसी भी MCP host,
 local HTTP API, और सीधे provider APIs (Anthropic / OpenAI / OpenRouter / Gemini / Ollama) पर चलता है।
+
+## Phase 4: Optimization
+
+### Benchmark — क्या SMR सच में पैसे बचाता है?
+
+```bash
+smr bench                                   # starter suite: smr vs best vs single:sonnet (असली API calls)
+smr bench --simulate                        # offline demo (API keys नहीं चाहिए) — साफ़ "SIMULATED" लिखा आता है
+smr bench my-suite.json --strategies smr,smr:economy,best --import
+```
+
+हर case हर strategy में **अलग, isolated log** के साथ चलता है (fair comparison)। Verdict
+success **और** cost दोनों देखता है — अगर SMR सस्ता है पर ज़्यादा tasks fail हुए, तो **FAIL**।
+Starter suite (`benchmarks/suites/starter.json`) में 10 cases हैं; coding cases का code सच में
+`node:assert` से run होकर verify होता है। ⚠️ `node-test` cases model का लिखा code आपकी machine पर
+(temp folder, timeout के साथ) चलाते हैं — सिर्फ भरोसेमंद suites इस्तेमाल करो।
+Results `.smr/benchmarks/` में save होते हैं; `--import` से Learning Engine उनसे सीखता है।
+
+### Learning Engine — routing जो अनुभव से सुधरती है
+
+```
+p = (p_prior · k + passes) / (k + attempts)        k = priorStrength (default 8)
+```
+
+हर logged attempt (model × category × complexity) router की success probability और token
+estimate को adjust करता है। कम data पर registry prior हावी रहता है, ज़्यादा data पर असली
+नतीजे। Critical-task floors फिर भी लागू रहते हैं। `smr learn` prior → observed → blended दिखाता है;
+routing reason में "learned from N runs" आता है। बंद करना हो: config में `"learning": {"enabled": false}`।
+
+### Token Optimizer
+
+```bash
+smr context "fix the escalation retry limit" --dir src --budget 4000
+#  smr context: 4 files, 25784 → 2991 tokens (88% saved)
+```
+
+Task के keywords से relevant files चुनता है, duplicates हटाता है, whitespace/minified/base64 compress
+करता है, और बड़ी files में से सिर्फ relevant हिस्से (keyword windows) रखता है। `.env`/keys कभी नहीं जाते।
+साथ में: history से output-length cap (`suggestMaxTokens`) और Anthropic prompt caching (`smr exec`)।
+MCP tool: `smr_pack_context`।
+
+### Dashboard
+
+```bash
+smr dashboard            # → .smr/dashboard.html (self-contained, offline, light + dark)
+smr serve                # → http://127.0.0.1:4317/dashboard (live)
+```
+
+Usage tiles (tasks, success, tokens, **savings vs always-best model**), cost by model, pass-rate
+heatmap (model × category), latest benchmark verdicts, Learning Engine table, recent tasks।
 
 ## Supported hosts
 
@@ -215,6 +266,11 @@ smart-model-router/
 │   ├── src/providers.ts      Provider adapters (Anthropic, OpenAI-compatible, Gemini)
 │   ├── src/executor.ts       Direct executor (route → call → verify → escalate)
 │   ├── src/hooks.ts          Transcript usage parser (Claude Code hooks)
+│   ├── src/learning.ts       Learning Engine (Bayesian blend of prior + observed)
+│   ├── src/optimizer.ts      Token Optimizer (context packing, compression, output caps)
+│   ├── src/benchmark.ts      Benchmark engine (strategies, verifiers, simulation, import)
+│   ├── src/insights.ts       Learning report + savings estimate
+│   ├── src/dashboard.ts      Self-contained HTML dashboard
 │   └── src/config.ts         Shared smr.config.json loading
 ├── packages/server/        Common SMR API → HTTP server + MCP stdio server
 ├── apps/cli/               `smr` command
@@ -222,6 +278,7 @@ smart-model-router/
 │   ├── claude-code/          Skill + 3 subagents + .mcp.json + SubagentStop hook + config
 │   ├── opencode/             Router agent + 3 subagents + opencode.json (MCP) + config
 │   └── codex/                Skill + 3 TOML agents + .codex/config.toml (MCP) + AGENTS.md
+├── benchmarks/suites/      Benchmark suites (starter.json)
 └── docs/ROADMAP.md
 ```
 

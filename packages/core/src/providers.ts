@@ -18,6 +18,8 @@ export interface CompletionRequest {
   system?: string;
   maxTokens?: number;
   timeoutMs?: number;
+  /** Ask the provider to cache the (stable) system prompt where supported (Anthropic). */
+  cacheSystem?: boolean;
 }
 
 export interface CompletionResult {
@@ -84,7 +86,11 @@ export function anthropicProvider(o: AdapterOpts = {}): ProviderAdapter {
         max_tokens: req.maxTokens ?? DEFAULT_MAX_TOKENS,
         messages: [{ role: "user", content: req.prompt }],
       };
-      if (req.system) body.system = req.system;
+      if (req.system) {
+        body.system = req.cacheSystem
+          ? [{ type: "text", text: req.system, cache_control: { type: "ephemeral" } }]
+          : req.system;
+      }
       const r = await post(f, `${base}/v1/messages`, { "x-api-key": key, "anthropic-version": "2023-06-01" }, body, req.timeoutMs);
       const text = (r.content ?? []).filter((c: any) => c.type === "text").map((c: any) => c.text ?? "").join("");
       return {

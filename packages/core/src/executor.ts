@@ -1,6 +1,7 @@
 import { ModelRegistry } from "./registry.js";
 import { ProviderError, ProviderRegistry } from "./providers.js";
 import { TaskSession } from "./session.js";
+import { suggestMaxTokens } from "./optimizer.js";
 import type { ExecutionStore, TaskStatus } from "./store.js";
 import type { EscalationPolicy, HostId, RouterOptions, TaskClassification } from "./types.js";
 
@@ -83,7 +84,8 @@ export async function executeTask(
       const r = await opts.providers.complete(modelId, {
         prompt,
         system: opts.system ?? SYSTEM,
-        maxTokens: opts.maxTokens ?? Math.max(1024, classification.estimatedOutputTokens),
+        cacheSystem: true,
+        maxTokens: opts.maxTokens ?? suggestMaxTokens(classification, opts.router?.history?.lookup(modelId, classification.category, classification.complexity)),
       });
       lastOutput = r.text;
       const v = await verify(r.text, { taskId: task.id, modelId, attempt: attempts });

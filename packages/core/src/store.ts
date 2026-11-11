@@ -61,6 +61,10 @@ export interface ExecutionStore {
   listTasks(limit?: number): TaskRecord[];
   modelStats(): ModelStats[];
   categoryStats(): { category: TaskCategory; modelId: string; attempts: number; passRate: number }[];
+  /** Per model × category × complexity — the Learning Engine's input. */
+  performanceStats(): PerformanceRow[];
+  /** Most recent attempts, oldest first. */
+  listAttempts(limit?: number): AttemptRow[];
   cacheGet(key: string): string | undefined;
   cacheSet(key: string, value: string): void;
   close(): void;
@@ -93,6 +97,38 @@ function aggregateModels(attempts: AttemptRow[]): ModelStats[] {
     else s.costUsd = Math.round(s.costUsd! * 1e6) / 1e6;
   }
   return [...by.values()].sort((a, b) => b.attempts - a.attempts);
+}
+
+export interface PerformanceRow {
+  modelId: string;
+  category: TaskCategory;
+  complexity: number;
+  attempts: number;
+  passes: number;
+  /** Attempts that reported tokens (for averages). */
+  tokenSamples: number;
+  inputTokens: number;
+  outputTokens: number;
+}
+
+function aggregatePerformance(tasks: { id: string; category: TaskCategory; complexity: number }[], attempts: AttemptRow[]): PerformanceRow[] {
+  const meta = new Map(tasks.map((t) => [t.id, t]));
+  const by = new Map<string, PerformanceRow>();
+  for (const a of attempts) {
+    const t = meta.get(a.taskId);
+    if (!t) continue;
+    const k = `${a.modelId}|${t.category}|${t.complexity}`;
+    const r = by.get(k) ?? { modelId: a.modelId, category: t.category, complexity: t.complexity, attempts: 0, passes: 0, tokenSamples: 0, inputTokens: 0, outputTokens: 0 };
+    r.attempts++;
+    if (a.passed) r.passes++;
+    if (a.inputTokens !== undefined || a.outputTokens !== undefined) {
+      r.tokenSamples++;
+      r.inputTokens += a.inputTokens ?? 0;
+      r.outputTokens += a.outputTokens ?? 0;
+    }
+    by.set(k, r);
+  }
+  return [...by.values()];
 }
 
 function aggregateCategories(tasks: TaskRecord[], attempts: AttemptRow[]) {
@@ -165,6 +201,8 @@ export class JsonStore implements ExecutionStore {
   listTasks(limit = 20) { return [...this.data.tasks].reverse().slice(0, limit); }
   modelStats() { return aggregateModels(this.data.attempts); }
   categoryStats() { return aggregateCategories(this.data.tasks, this.data.attempts); }
+  performanceStats() { return aggregatePerformance(this.data.tasks, this.data.attempts); }
+  listAttempts(limit = 1000) { return this.data.attempts.slice(-limit); }
   cacheGet(key: string) { return this.data.cache[key]; }
   cacheSet(key: string, value: string) { this.data.cache[key] = value; this.save(); }
   close() {}
@@ -273,10 +311,16 @@ export class SqliteStore implements ExecutionStore {
   }
 
   private allAttempts() { return this.db.prepare(`SELECT * FROM attempts ORDER BY id`).all().map((r) => this.rowToAttempt(r)); }
+  private allTasks() { return this.db.prepare(`SELECT * FROM tasks`).all().map((r) => this.rowToTask(r)); }
   modelStats() { return aggregateModels(this.allAttempts()); }
-  categoryStats() {
-    const tasks = this.db.prepare(`SELECT * FROM tasks`).all().map((r) => this.rowToTask(r));
-    return aggregateCategories(tasks, this.allAttempts());
+  categoryStats() { return aggregateCategories(this.allTasks(), this.allAttempts()); }
+  performanceStats() {
+    // Light query: only the columns learning needs (no classification/decision JSON).
+    const meta = this.db.prepare(`SELECT id, category, complexity FROM tasks`).all() as { id: string; category: TaskCategory; complexity: number }[];
+    return aggregatePerformance(meta, this.allAttempts());
+  }
+  listAttempts(limit = 1000) {
+    return this.db.prepare(`SELECT * FROM attempts ORDER BY id DESC LIMIT ?`).all(limit).map((r) => this.rowToAttempt(r)).reverse();
   }
   cacheGet(key: string) { return this.db.prepare(`SELECT value FROM cache WHERE key = ?`).get(key)?.value; }
   cacheSet(key: string, value: string) {

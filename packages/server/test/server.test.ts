@@ -22,6 +22,21 @@ describe("Common API", () => {
     expect(rep.models[0].attempts).toBe(2);
   });
 
+  it("packs context inside the project only, and exposes learning", async () => {
+    const { mkdtempSync, writeFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const { tmpdir } = await import("node:os");
+    const dir = mkdtempSync(join(tmpdir(), "smr-proj-"));
+    writeFileSync(join(dir, "auth.ts"), "export function login() { /* jwt token */ }");
+    writeFileSync(join(dir, ".env"), "SECRET=abc123456789");
+    const c = createContext({}, { store: new JsonStore(), providers: new ProviderRegistry([]), cwd: dir });
+    const r: any = await runOperation(c, "smr_pack_context", { task: "fix login jwt" });
+    expect(r.files.map((f: any) => f.path)).toEqual(["auth.ts"]);
+    expect(r.markdown).not.toContain("abc123456789");
+    await expect(runOperation(c, "smr_pack_context", { task: "x", dirs: ["../.."] })).rejects.toThrow(/outside project/);
+    expect(await runOperation(c, "smr_learn", {})).toEqual([]);
+  });
+
   it("every operation has a JSON schema for MCP", () => {
     for (const o of OPERATIONS) expect(o.jsonSchema).toMatchObject({ type: "object" });
   });
@@ -55,6 +70,13 @@ describe("HTTP server", () => {
     expect((await call("GET", "/nothing")).status).toBe(404);
     const bad = await fetch(url + "/tasks/route", { method: "POST", body: "{not json" });
     expect(bad.status).toBe(400);
+  });
+
+  it("serves the HTML dashboard", async () => {
+    const res = await fetch(url + "/dashboard");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toMatch(/text\/html/);
+    expect(await res.text()).toContain("Smart Model Router");
   });
 
   it("enforces SMR_API_TOKEN when set", async () => {

@@ -10,7 +10,7 @@ import { OPERATIONS, runOperation, type ApiContext } from "./api.js";
  * stdout carries protocol messages ONLY — all logging goes to stderr.
  */
 
-const SERVER_INFO = { name: "smart-model-router", version: "0.3.0" };
+const SERVER_INFO = { name: "smart-model-router", version: "0.4.0" };
 const DEFAULT_PROTOCOL = "2025-06-18";
 
 interface RpcRequest { jsonrpc: "2.0"; id?: string | number | null; method: string; params?: any }

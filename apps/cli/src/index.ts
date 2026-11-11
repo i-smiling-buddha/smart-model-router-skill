@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { cpSync, existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -21,6 +21,18 @@ import {
   SMR_AGENT_MODELS,
   TaskSession,
   usageFromTranscript,
+  historyFor,
+  learningReport,
+  packContext,
+  collectFiles,
+  runBenchmark,
+  parseStrategy,
+  importBenchmark,
+  buildDashboardData,
+  renderDashboard,
+  type BenchmarkReport,
+  type BenchmarkSuite,
+  type ContextFile,
   DEFAULT_POLICY,
   type AttemptRecord,
   type EscalationDecision,
@@ -61,6 +73,14 @@ Universal integration:
   smr serve [--port 4317]                         local HTTP API on 127.0.0.1 (optional SMR_API_TOKEN)
   smr hook subagent-stop                          Claude Code SubagentStop hook: captures subagent token usage
 
+Optimization (Phase 4):
+  smr bench [suite.json] [--strategies smr,best,single:<model>] [--simulate] [--seed N] [--import]
+      single model vs SMR vs best model — success, cost, tokens, retries; saved to .smr/benchmarks/
+      (real runs need API keys; node-test cases execute model-written code locally)
+  smr learn [--json]                              prior vs observed vs blended success per model × task type
+  smr context "<task>" [--dir src] [--file f]... [--budget 8000]   pack only relevant, compressed context
+  smr dashboard [--out file.html]                 self-contained HTML dashboard (also at /dashboard in smr serve)
+
 Reporting / setup:
   smr report [--json]
   smr init <claude-code|opencode|codex> [targetDir]
@@ -74,7 +94,7 @@ Options:
 
 type Flags = Record<string, string | boolean | string[]>;
 
-const REPEATABLE = new Set(["constraint", "file"]);
+const REPEATABLE = new Set(["constraint", "file", "dir"]);
 
 function parseArgs(argv: string[]): { positional: string[]; flags: Flags } {
   const positional: string[] = [];
@@ -128,7 +148,10 @@ async function main(): Promise<void> {
   const out = (data: unknown, human: () => string) => console.log(json ? JSON.stringify(data, null, 2) : human());
 
   let store: ExecutionStore | undefined;
-  const getStore = () => (store ??= openStore(resolve(cfg.storeDir ?? ".smr")));
+  const storeDir = resolve(cfg.storeDir ?? ".smr");
+  const getStore = () => (store ??= openStore(storeDir));
+  // Learning Engine: only when a log already exists (plain `smr route` never creates .smr/).
+  const learned = () => (existsSync(storeDir) ? { ...routerOpts, history: historyFor(cfg, getStore()) } : routerOpts);
 
   const classify = async (text: string): Promise<TaskClassification> => {
     const useLlm = !!flags.llm || !!cfg.llmClassifier?.enabled;
@@ -149,7 +172,7 @@ async function main(): Promise<void> {
       }
       case "route": {
         const c = await classify(need(positional.join(" ")));
-        const d = new Router(registry).route(c, routerOpts);
+        const d = new Router(registry).route(c, learned());
         out({ classification: c, decision: d }, () =>
           [`→ ${d.hostModel}   (${d.selectedModel})`,
            `  ${d.routingReason}`,
@@ -186,7 +209,7 @@ async function main(): Promise<void> {
       }
       case "task": {
         const sub = positional[0];
-        const session = new TaskSession(getStore(), registry, policy, host, routerOpts);
+        const session = new TaskSession(getStore(), registry, policy, host, learned());
         if (sub === "start") {
           const text = need(positional.slice(1).join(" "));
           const t = session.start(text, await classify(text));
@@ -238,7 +261,7 @@ async function main(): Promise<void> {
         let next: EscalationDecision | undefined;
         const model = str(flags.model);
         if (rec && model) {
-          const session = new TaskSession(getStore(), registry, policy, host, routerOpts);
+          const session = new TaskSession(getStore(), registry, policy, host, learned());
           next = session.recordAttempt(rec.task.id, {
             model, passed: result.passed, failureReason: result.failureSummary?.slice(0, 500),
           }).next;
@@ -276,7 +299,7 @@ async function main(): Promise<void> {
       case "exec": {
         const text = need(positional.join(" "));
         const r = await executeTask(text, await classify(text), {
-          store: getStore(), providers: ProviderRegistry.defaults(), registry, policy, host, router: routerOpts,
+          store: getStore(), providers: ProviderRegistry.defaults(), registry, policy, host, router: learned(),
           system: str(flags.system),
           onEvent: json ? undefined : (e) => {
             if (e.type === "attempt") console.error(`  ${e.passed ? "✓" : "✗"} ${e.modelId}  in ${e.inputTokens} / out ${e.outputTokens}${e.reason ? "  " + e.reason : ""}`);
@@ -313,6 +336,68 @@ async function main(): Promise<void> {
         } catch (e) {
           console.error(`smr hook: ${(e as Error).message}`);
         }
+        return;
+      }
+      case "bench": {
+        const here = dirname(fileURLToPath(import.meta.url));
+        const suitePath = positional[0] ?? join(here, "..", "..", "..", "benchmarks", "suites", "starter.json");
+        if (!existsSync(suitePath)) fail(`suite not found: ${suitePath}`);
+        const suite = JSON.parse(readFileSync(suitePath, "utf8")) as BenchmarkSuite;
+        const standard = registry.available().find((m) => m.tier === "standard")?.id ?? registry.available()[0]!.id;
+        const strategies = (str(flags.strategies) ?? `smr,best,single:${standard}`).split(",").map((x) => parseStrategy(x.trim()));
+        const simulate = flags.simulate ? { seed: num(flags.seed) ?? 42 } : undefined;
+        if (!json) console.error(`benchmark "${suite.name}": ${suite.cases.length} cases × ${strategies.length} strategies${simulate ? "  [SIMULATED — demo data, not a real measurement]" : ""}`);
+        const report = await runBenchmark(suite, {
+          strategies, registry, policy, simulate,
+          onProgress: json ? undefined : (r) => console.error(`  ${r.passed ? "✓" : "✗"} ${r.strategy.padEnd(36)} ${r.caseId.padEnd(24)} ${r.modelsUsed.map((m) => m.replace(/^[^/]+\//, "")).join("→")}`),
+        });
+        const dir = join(storeDir, "benchmarks");
+        mkdirSync(dir, { recursive: true });
+        const file = join(dir, `${report.finishedAt.replace(/[:.]/g, "-")}-${suite.name}${report.simulated ? "-simulated" : ""}.json`);
+        writeFileSync(file, JSON.stringify(report, null, 2));
+        let imported = 0;
+        if (flags.import) {
+          if (report.simulated && !flags["import-simulated"]) console.error("smr: not importing a simulated run into the learning log (use --import-simulated to force).");
+          else imported = importBenchmark(getStore(), report, registry);
+        }
+        out({ ...report, replay: undefined, savedTo: file, imported }, () => {
+          const usd = report.strategies.every((s) => s.costUsd !== null);
+          return ["", "Strategy                              success  retries     tokens        cost",
+            ...report.strategies.map((s) => `${s.strategy.padEnd(36)} ${(Math.round(s.successRate * 100) + "%").padStart(7)}  ${String(s.retries).padStart(7)}  ${String(s.inputTokens + s.outputTokens).padStart(9)}  ${(usd ? "$" + s.costUsd!.toFixed(4) : s.costUnits.toFixed(4) + "u").padStart(10)}`),
+            "", ...report.comparisons.map((c) => `${c.verdict === "pass" ? "✓ PASS" : "✗ FAIL"}  SMR vs ${c.baseline}: ${c.why}`),
+            "", `saved: ${file}${imported ? `  ·  ${imported} attempts imported for learning` : ""}`].join("\n");
+        });
+        return;
+      }
+      case "learn": {
+        const rows = existsSync(storeDir) ? learningReport(getStore(), registry, cfg.learning) : [];
+        out(rows, () => rows.length
+          ? ["model                     category       cx  attempts  prior  observed  blended",
+             ...rows.map((r) => `${r.modelId.replace(/^[^/]+\//, "").padEnd(25)} ${r.category.padEnd(14)} ${String(r.complexity).padStart(2)}  ${String(r.attempts).padStart(8)}  ${(Math.round(r.priorP * 100) + "%").padStart(5)}  ${(Math.round(r.observedPassRate * 100) + "%").padStart(8)}  ${(Math.round(r.blendedP * 100) + "%").padStart(7)}`),
+             "", `blended = (prior × ${cfg.learning?.priorStrength ?? 8} + passes) / (${cfg.learning?.priorStrength ?? 8} + attempts) — used by the router${cfg.learning?.enabled === false ? " (learning is DISABLED in config)" : ""}`].join("\n")
+          : "Nothing learned yet — log some tasks (smr task ...) or run smr bench --import.");
+        return;
+      }
+      case "context": {
+        const text = need(positional.join(" "));
+        const files: ContextFile[] = [];
+        for (const d of (flags.dir as string[] | undefined) ?? []) files.push(...collectFiles(resolve(d)).map((f) => ({ ...f, path: join(d, f.path).split("\\").join("/") })));
+        for (const f of (flags.file as string[] | undefined) ?? []) if (existsSync(f)) files.push({ path: f, content: readFileSync(f, "utf8") });
+        if (!files.length) fail("give files with --dir <folder> and/or --file <path>");
+        const r = packContext(text, files, num(flags.budget) ?? cfg.optimizer?.contextBudgetTokens ?? 8_000);
+        out(r, () => r.markdown);
+        if (!json) console.error(`\nsmr context: ${r.files.length} files, ${r.tokensBefore} → ${r.tokensAfter} tokens (${r.savedPct}% saved)${r.dropped.length ? `, ${r.dropped.length} dropped` : ""}`);
+        return;
+      }
+      case "dashboard": {
+        const benchDir = join(storeDir, "benchmarks");
+        const benches: BenchmarkReport[] = existsSync(benchDir)
+          ? readdirSync(benchDir).filter((f) => f.endsWith(".json")).map((f) => JSON.parse(readFileSync(join(benchDir, f), "utf8")))
+          : [];
+        const html = renderDashboard(buildDashboardData(getStore(), registry, benches));
+        const file = resolve(str(flags.out) ?? join(storeDir, "dashboard.html"));
+        writeFileSync(file, html);
+        console.log(`dashboard: ${file}`);
         return;
       }
       case "init": {
