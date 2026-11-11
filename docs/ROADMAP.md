@@ -13,12 +13,18 @@
 - [x] OpenCode integration (primary router agent + subagents)
 - [x] Test suite
 
-## Phase 2 — Intelligence (next)
-- [ ] LLM fallback classification when `confidence < 0.6` (cheapest model, cached)
-- [ ] Quality Evaluator module: run static/functional checks from config (`tsc`, `eslint`, `npm test`)
-- [ ] Execution log (SQLite): task → model → attempts → pass/fail → tokens
-- [ ] `smr report` — per-session cost and routing summary
-- [ ] Claude Code hooks: capture subagent results automatically into the log
+## ✅ Phase 2 — Intelligence — done
+- [x] LLM fallback classification when `confidence < 0.6` (cheap model, cached, never lowers risk)
+- [x] Quality Evaluator: static → functional (fail-fast) → semantic checklist; auto-detects package.json checks
+- [x] Execution log: `node:sqlite` with JSON fallback — tasks, attempts, tokens, cost, cache
+- [x] Retry management from real history: `smr task start / attempt / next / handoff / show`
+- [x] `smr verify <id> --model <m>` records the attempt and returns the next action
+- [x] `smr report` — per-model pass rate, tokens, cost; pass rate by category
+- [x] Claude Code skill + OpenCode router updated to the logged lifecycle
+
+## Phase 2b — carry-over
+- [ ] Claude Code hooks (SubagentStop) to capture results/tokens automatically
+- [ ] Live test of the Anthropic LLM-classifier backend
 
 ## Phase 3 — Universal Integration
 - [ ] Codex adapter (skills)

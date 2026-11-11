@@ -21,15 +21,16 @@ verify, report. Hand the heavy lifting to the routed subagent.
 
 ## Procedure — for every task the user gives
 
-### 1. Route
-If the `smr` CLI is available (check once: `smr --help` or `npx smr --help`), run:
+### 1. Route (and open a logged task)
+If the `smr` CLI is available (check once: `smr --help`), run:
 
 ```bash
-smr route --host claude-code --json "<the task, one line>"
+smr task start --host claude-code --json "<the task, one line>"
 ```
 
-Read `decision.hostModel` (`haiku` | `sonnet` | `opus`), `decision.routingReason`,
-`decision.verificationLevels` and `decision.fallbackModels`.
+Keep the returned `taskId`. Read `decision.hostModel` (`haiku` | `sonnet` | `opus`),
+`decision.routingReason` and `decision.verificationLevels`.
+(`smr route --json "<task>"` does the same without logging.)
 
 If the CLI is not available, classify yourself with this table:
 
@@ -67,20 +68,34 @@ Earlier failed attempts: <model: reason>   (only on retry/escalation)
 Never put API keys, `.env` contents, private keys or credentials into a handoff.
 
 ### 4. Verify (match effort to the task)
-- `static` → typecheck / lint / build
-- `functional` → run the relevant tests
-- `semantic` → re-read the user's requirement and check the output matches
+With the CLI, after the subagent finishes:
 
-A README needs only `semantic`. Don't run a full test suite for docs.
+```bash
+smr verify <taskId> --model <hostModel> --host claude-code --json
+```
+
+This runs only the checks the task needs (static → functional, fail-fast), records the attempt
+as pass/fail, and returns `next` (what to do now). Then tick the `semanticChecklist` yourself by
+re-reading the user's requirement. If semantic review fails even though checks passed, record it:
+`smr task attempt <taskId> --model <m> --fail --reason "<what's missing>"`.
+
+Without the CLI: typecheck/lint/build → relevant tests → requirement match.
+A README needs only the requirement check. Never run a full test suite for docs.
 
 ### 5. Retry / escalate (hard limits)
-- Failed once → retry the **same** subagent once, including the failure output.
-- Failed twice → escalate one tier (haiku → sonnet → opus) with the handoff + failure history.
-  With the CLI: `smr escalate --host claude-code --from <model> --attempts 2 --reason "<why>" "<task>"`.
-- Max **2 escalations** per task. Then stop, explain what failed, and ask the user.
-- If the context window is the problem, escalate immediately (retrying won't help).
+Follow `next.action` from `smr verify` / `smr task attempt` / `smr task next <taskId>`:
+- `retry` → same subagent once more, with the failure output.
+- `escalate` → `smr task handoff <taskId> --constraint "..."` and give that handoff to the
+  subagent for `next.hostModel`.
+- `stop` → explain what failed and ask the user (limits: 2 tries per model, 2 escalations, cost ceiling).
+- `complete` → done.
+
+Without the CLI: retry once, then escalate one tier (haiku → sonnet → opus), max 2 escalations.
+If a subagent replies `ESCALATE:` or the context window is the problem, escalate immediately.
 
 ### 6. Report (short)
+If the subagent result shows token usage, include it when recording
+(`--input-tokens N --output-tokens N`). `smr report` shows per-model pass rate and cost.
 End with one line per routed task:
 
 ```

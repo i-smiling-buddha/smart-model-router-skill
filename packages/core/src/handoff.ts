@@ -58,7 +58,7 @@ export function buildHandoff(h: TaskHandoff, opts: { maxTokens?: number } = {}):
     `**Task:** ${h.task}`,
     `**Original requirement:** ${h.originalRequirement}`,
     `**Constraints (must keep):**\n${list(h.constraints)}`,
-    `**User decisions (must keep):**\n${list(h.userDecisions)}`,
+    h.userDecisions?.length ? `**User decisions (must keep):**\n${list(h.userDecisions)}` : "",
     h.expectedOutput ? `**Expected output:** ${h.expectedOutput}` : "",
   ].filter(Boolean);
 
@@ -66,8 +66,8 @@ export function buildHandoff(h: TaskHandoff, opts: { maxTokens?: number } = {}):
   const files = (h.relevantFiles ?? []).filter((f) => !isSensitiveFile(f));
   const optional = [
     h.previousWork ? `**Previous work:** ${h.previousWork}` : "",
-    `**Completed:**\n${list(h.completed)}`,
-    `**Remaining:**\n${list(h.remaining)}`,
+    h.completed?.length ? `**Completed:**\n${list(h.completed)}` : "",
+    h.remaining?.length ? `**Remaining:**\n${list(h.remaining)}` : "",
     files.length ? `**Relevant files:**\n${list(files)}` : "",
     h.failureHistory?.length ? `**Earlier attempts that failed:**\n${list(h.failureHistory.map((f) => `${f.modelId}: ${f.reason}`))}` : "",
     h.findings?.length ? `**Findings:**\n${list(h.findings)}` : "",

@@ -45,7 +45,7 @@ export function decideNext(
       action: "retry",
       modelId: current.id,
       hostModel: registry.hostModel(current, host),
-      reason: `attempt ${triesOnCurrent}/${policy.maxRetriesPerModel} failed (${last.failureReason ?? "verification failed"}) — retry once with the failure details`,
+      reason: `attempt ${triesOnCurrent}/${policy.maxRetriesPerModel} failed (${oneLine(last.failureReason ?? "verification failed")}) — retry once with the failure details`,
     };
   }
 
@@ -68,6 +68,11 @@ export function decideNext(
     hostModel: registry.hostModel(next, host),
     reason: `${current.displayName} failed ${triesOnCurrent}× — escalating to ${next.displayName} with a compact handoff`,
   };
+}
+
+function oneLine(s: string, max = 120): string {
+  const flat = s.replace(/\s+/g, " ").trim();
+  return flat.length > max ? flat.slice(0, max - 1) + "…" : flat;
 }
 
 function countTrailing(attempts: AttemptRecord[], modelId: string): number {
