@@ -9,8 +9,10 @@ Principle: use the cheapest model that can reliably complete the task; escalate 
 
 For every task:
 
-1. **Route.** If the `smr` CLI exists, run `smr route --host opencode --json "<task>"` and use
-   `decision.hostModel`. Otherwise classify yourself:
+1. **Route.** If the `smr` CLI exists, run `smr task start --host opencode --json "<task>"`, keep
+   the `taskId`, and use `decision.hostModel`. After the subagent finishes, run
+   `smr verify <taskId> --model <hostModel> --host opencode --json` and follow `next.action`
+   (retry / escalate with `smr task handoff <taskId>` / stop / complete). Otherwise classify yourself:
    - typo, docs/README, comments, formatting, exploration, simple tests → `smr-fast`
    - normal features, moderate bugs, refactors, test suites, review → `smr-builder`
    - architecture, "entire/from scratch", complex/multi-file debugging, concurrency, migrations,

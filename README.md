@@ -8,7 +8,8 @@ SMR हर coding task को समझता है, उसके लिए स
 fail होने पर ही stronger model पर जाता है। लक्ष्य है **Minimum Cost per Successful Task** —
 सिर्फ minimum cost per token नहीं।
 
-**Status:** Phase 1 (MVP) — Core Engine + CLI + Claude Code और OpenCode integration ready।
+**Status:** Phase 2 (Intelligence) — Quality Evaluator, Execution Log (SQLite), history-based
+retry/escalation, LLM fallback classifier और `smr report` ready।
 
 ---
 
@@ -53,8 +54,40 @@ Main session को Sonnet पर रखना सबसे सस्ता orch
 | `smr models [--json]` | Registry देखना |
 | `smr init <claude-code\|opencode> [dir]` | Integration files copy करना |
 
+| `smr task start "<task>"` | Task open करना + log करना, task id और model मिलता है |
+| `smr verify <id> --model <m>` | Task की ज़रूरत के checks चलाना, attempt record करना, next step बताना |
+| `smr task attempt <id> --model <m> --pass\|--fail [--reason] [--input-tokens N --output-tokens N]` | Attempt manually record करना |
+| `smr task next <id>` | Real history से retry / escalate / stop / complete |
+| `smr task handoff <id> [--constraint "..."] [--file path]` | अगले model के लिए compact handoff (failure history के साथ) |
+| `smr task show <id>` · `smr report` | Task detail · per-model pass rate, tokens, cost |
+
 `--json` output skills और agents के लिए है। Hindi और Hinglish tasks भी समझता है
 (`"लॉगिन बग ठीक करो"`, `"पूरा authentication system बनाओ"`)।
+
+### Task lifecycle (Phase 2)
+
+```bash
+smr task start "add a dark mode toggle to the settings page" --host claude-code
+#  task t_mwbq1fy1ac123b  → sonnet
+smr verify t_mwbq1fy1ac123b --model sonnet      # typecheck ✓  test ✗  → RETRY → sonnet
+smr verify t_mwbq1fy1ac123b --model sonnet      # test ✗           → ESCALATE → opus
+smr task handoff t_mwbq1fy1ac123b --constraint "Keep existing theme API"
+smr verify t_mwbq1fy1ac123b --model opus        # ✓                → COMPLETE
+smr report
+```
+
+**Quality Evaluator:** `static` (typecheck/lint/build) → `functional` (tests, सिर्फ तब जब static
+pass हो) → `semantic` (requirement checklist, host model या आप tick करते हैं)। Checks
+`package.json` scripts से auto-detect होते हैं, या `smr.config.json` में `"checks"` से set करो।
+README जैसे tasks पर कोई command नहीं चलता।
+
+**Execution Log:** `.smr/smr.db` (Node ≥ 22.5 का built-in `node:sqlite`), नहीं तो `.smr/log.json`।
+सब local रहता है। इसे `.gitignore` में डालो।
+
+**LLM fallback classifier:** सिर्फ तब जब rule-based confidence < 0.6 हो। Cheap model
+(default `claude-haiku-5-5`) से पूछता है, answer cache करता है, और rules ने जो risk पकड़ा उसे
+कभी कम नहीं करता। चालू करने के लिए `--llm` या config में `"llmClassifier": {"enabled": true}`,
+और env में `ANTHROPIC_API_KEY`। Key कभी log या prompt में नहीं जाती।
 
 ---
 
@@ -126,6 +159,10 @@ smart-model-router/
 │   ├── src/cost.ts           Cost estimator + per-task ledger
 │   ├── src/escalation.ts     Fallback & Escalation Manager
 │   ├── src/handoff.ts        Context Manager (compact handoff + secret redaction)
+│   ├── src/evaluator.ts      Quality Evaluator (static → functional → semantic)
+│   ├── src/store.ts          Execution Log (SQLite / JSON)
+│   ├── src/session.ts        Task lifecycle + history-based retry management
+│   ├── src/llm-classifier.ts Hybrid classification (low confidence → cheap LLM, cached)
 │   └── test/                 Vitest suite
 ├── apps/cli/               `smr` command
 ├── integrations/
@@ -138,8 +175,9 @@ smart-model-router/
 
 - कोई भी skill host का **main model चुपचाप नहीं बदल सकती**। SMR subagents (जिनका अपना `model:`
   है) को delegate करके काम करता है — यही Claude Code और OpenCode दोनों का supported तरीका है।
-- Classifier अभी keyword-based है; ambiguous tasks पर `confidence` कम आता है। LLM fallback
-  classification Phase 2 में है।
-- Actual token usage अभी host track करता है; SMR का cost **estimate** है।
+- LLM classifier का live API call यहाँ test नहीं हुआ (sandbox में network नहीं था) — logic mock
+  backend से test है। पहली बार `--llm` चलाकर check कर लेना।
+- Token counts अपने आप capture नहीं होते; skill उन्हें `--input-tokens/--output-tokens` से
+  record करती है जब host दिखाता है। Automatic capture (hooks) अगला step है।
 
 License: MIT
