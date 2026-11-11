@@ -155,6 +155,7 @@ export class Router {
     const verificationLevels = verificationLevelsFor(task);
     return {
       taskId: task.taskId,
+      host,
       selectedModel: winner.modelId,
       hostModel: this.registry.hostModel(winnerModel, host),
       mode,

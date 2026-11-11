@@ -1,0 +1,22 @@
+{
+  "name": "@smr/server",
+  "version": "0.3.0",
+  "description": "SMR Common API — local HTTP server and MCP (stdio) server over the same handlers",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@smr/core": "0.3.0",
+    "zod": "^3.23.0"
+  },
+  "license": "MIT"
+}

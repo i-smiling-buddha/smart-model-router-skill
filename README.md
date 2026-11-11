@@ -8,8 +8,22 @@ SMR हर coding task को समझता है, उसके लिए स
 fail होने पर ही stronger model पर जाता है। लक्ष्य है **Minimum Cost per Successful Task** —
 सिर्फ minimum cost per token नहीं।
 
-**Status:** Phase 2 (Intelligence) — Quality Evaluator, Execution Log (SQLite), history-based
-retry/escalation, LLM fallback classifier और `smr report` ready।
+**Status:** Phase 3 (Universal Integration) — Claude Code, OpenCode, Codex, किसी भी MCP host,
+local HTTP API, और सीधे provider APIs (Anthropic / OpenAI / OpenRouter / Gemini / Ollama) पर चलता है।
+
+## Supported hosts
+
+| Host | कैसे जुड़ता है | Install |
+|---|---|---|
+| **Claude Code** | Skill + `smr-fast/builder/architect` subagents (haiku/sonnet/opus) + MCP + SubagentStop hook (auto token capture) | `smr init claude-code` |
+| **OpenCode** | `smr-router` primary agent + subagents + MCP (`opencode.json`) | `smr init opencode` |
+| **Codex** | Skill (`.agents/skills`) + custom agents (`.codex/agents/*.toml`) + MCP (`.codex/config.toml`) + `AGENTS.md` | `smr init codex` |
+| **कोई भी MCP host** (Cursor, VS Code agents…) | `smr mcp` — 10 tools: `smr_route`, `smr_task_start`, `smr_verify`, `smr_task_attempt`, `smr_task_next`, `smr_task_handoff`, `smr_execute`, `smr_classify`, `smr_models`, `smr_report` | host के MCP config में `command: "smr", args: ["mcp"]` |
+| **Custom agents / scripts** | `smr serve` — local HTTP API, या `smr exec` — सीधा provider call | — |
+
+`smr init` आपकी मौजूदा files (जैसे `opencode.json`, `.claude/settings.json`, `AGENTS.md`)
+**कभी overwrite नहीं करता** — skip हुई files की list दिखाता है, SMR वाला हिस्सा हाथ से merge कर लेना।
+सब hosts के लिए `smr` PATH पर होना चाहिए: `npm link -w @smr/cli`।
 
 ---
 
@@ -63,6 +77,40 @@ Main session को Sonnet पर रखना सबसे सस्ता orch
 
 `--json` output skills और agents के लिए है। Hindi और Hinglish tasks भी समझता है
 (`"लॉगिन बग ठीक करो"`, `"पूरा authentication system बनाओ"`)।
+
+| `smr exec "<task>" [--system "..."]` | Provider API को सीधे call करना: route → call → verify → escalate, usage auto-log |
+| `smr mcp` | MCP server (stdio) |
+| `smr serve [--port 4317]` | Local HTTP API (सिर्फ 127.0.0.1; optional `SMR_API_TOKEN`) |
+| `smr hook subagent-stop` | Claude Code hook — subagent transcript से tokens capture करता है |
+
+### Direct execution & providers (Phase 3)
+
+`smr exec` उन tasks के लिए है जिन्हें files edit नहीं करनी (docs, plans, explanations, snippets),
+या custom agents के लिए जो खुद model switch नहीं कर सकते:
+
+```bash
+export ANTHROPIC_API_KEY=...        # ज़रूरत के हिसाब से: OPENAI_API_KEY, OPENROUTER_API_KEY, GEMINI_API_KEY
+smr exec "write README docs for the auth module"
+#   ✓ anthropic/claude-haiku-5-5  in 812 / out 640
+```
+
+Registry model id का prefix provider चुनता है: `anthropic/…`, `openai/…`, `openrouter/<vendor>/<model>`,
+`google/…`, `ollama/…` (local, बिना key; `OLLAMA_HOST`)। Keys सिर्फ environment से पढ़ी जाती हैं —
+कभी log, store या prompt में नहीं जातीं। Model अगर `ESCALATE:` जवाब दे या provider down हो
+(429/5xx/no key), तो retry skip करके सीधे अगले tier पर जाता है।
+
+### HTTP API (`smr serve`)
+
+| Endpoint | काम |
+|---|---|
+| `GET /health` · `GET /models` · `GET /usage` (`/analytics`) | Status, registry, report |
+| `POST /tasks/classify` · `POST /tasks/route` | Classification / routing |
+| `POST /tasks` | Task start |
+| `POST /tasks/:id/attempts` · `GET /tasks/:id/next` · `POST /tasks/:id/handoff` · `GET /tasks/:id` | Lifecycle |
+| `POST /tasks/evaluate` · `POST /tasks/execute` | Verify / direct execution |
+
+HTTP और MCP दोनों **एक ही Common API** (`packages/server/src/api.ts`) पर चलते हैं — same schema,
+same routing, same result format।
 
 ### Task lifecycle (Phase 2)
 
@@ -164,10 +212,16 @@ smart-model-router/
 │   ├── src/session.ts        Task lifecycle + history-based retry management
 │   ├── src/llm-classifier.ts Hybrid classification (low confidence → cheap LLM, cached)
 │   └── test/                 Vitest suite
+│   ├── src/providers.ts      Provider adapters (Anthropic, OpenAI-compatible, Gemini)
+│   ├── src/executor.ts       Direct executor (route → call → verify → escalate)
+│   ├── src/hooks.ts          Transcript usage parser (Claude Code hooks)
+│   └── src/config.ts         Shared smr.config.json loading
+├── packages/server/        Common SMR API → HTTP server + MCP stdio server
 ├── apps/cli/               `smr` command
 ├── integrations/
-│   ├── claude-code/          Skill + 3 subagents + config
-│   └── opencode/             Router agent + 3 subagents + config
+│   ├── claude-code/          Skill + 3 subagents + .mcp.json + SubagentStop hook + config
+│   ├── opencode/             Router agent + 3 subagents + opencode.json (MCP) + config
+│   └── codex/                Skill + 3 TOML agents + .codex/config.toml (MCP) + AGENTS.md
 └── docs/ROADMAP.md
 ```
 
@@ -177,7 +231,12 @@ smart-model-router/
   है) को delegate करके काम करता है — यही Claude Code और OpenCode दोनों का supported तरीका है।
 - LLM classifier का live API call यहाँ test नहीं हुआ (sandbox में network नहीं था) — logic mock
   backend से test है। पहली बार `--llm` चलाकर check कर लेना।
-- Token counts अपने आप capture नहीं होते; skill उन्हें `--input-tokens/--output-tokens` से
-  record करती है जब host दिखाता है। Automatic capture (hooks) अगला step है।
+- Live provider API calls (Anthropic/OpenAI/OpenRouter/Gemini/Ollama) यहाँ network न होने से test
+  नहीं हुए — request/response shapes mock से test हैं। पहली बार `smr exec` चलाकर check कर लेना।
+- Codex agent files में model names (`gpt-5.4-mini`, `gpt-5.5`) अपने account के available models
+  से **verify करके** बदल लेना।
+- Automatic token capture अभी सिर्फ Claude Code में है (SubagentStop hook)। OpenCode/Codex में
+  tokens `--input-tokens/--output-tokens` या `smr_task_attempt` से record होते हैं; `smr exec`
+  हर host पर usage खुद log करता है।
 
 License: MIT

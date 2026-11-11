@@ -22,14 +22,24 @@
 - [x] `smr report` — per-model pass rate, tokens, cost; pass rate by category
 - [x] Claude Code skill + OpenCode router updated to the logged lifecycle
 
-## Phase 2b — carry-over
-- [ ] Claude Code hooks (SubagentStop) to capture results/tokens automatically
-- [ ] Live test of the Anthropic LLM-classifier backend
+## ✅ Phase 2b — done
+- [x] Claude Code SubagentStop hook → token usage parsed from subagent transcript, attached to the next attempt
 
-## Phase 3 — Universal Integration
-- [ ] Codex adapter (skills)
-- [ ] Generic adapter: local HTTP API (Fastify) + MCP server
-- [ ] Provider adapters (Anthropic / OpenAI / Google / OpenRouter / Ollama) for direct execution
+## ✅ Phase 3 — Universal Integration — done
+- [x] Codex adapter: `.agents/skills` skill, `.codex/agents/*.toml` (per-agent model), MCP in `.codex/config.toml`, `AGENTS.md`
+- [x] Common SMR API (one set of operations) exposed as:
+  - [x] MCP stdio server — `smr mcp` (10 tools) — works with any MCP host
+  - [x] Local HTTP API — `smr serve` (127.0.0.1, optional bearer token). Built on `node:http` instead of Fastify: zero extra dependencies.
+- [x] Provider adapters: Anthropic, OpenAI, OpenRouter, Google Gemini, Ollama (+ any OpenAI-compatible endpoint)
+- [x] Direct executor `smr exec` with automatic usage logging, ESCALATE handling, provider-outage escalation
+- [x] MCP configs for Claude Code (`.mcp.json`) and OpenCode (`opencode.json`)
+- [x] `smr init` never overwrites existing files; reports what it skipped
+- [x] Decisions remember their host across the task lifecycle
+
+## Carry-over
+- [ ] Live tests against real provider APIs (LLM classifier + `smr exec`)
+- [ ] Verify Codex agent model names against current Codex models
+- [ ] Automatic token capture for OpenCode / Codex (plugin / hook equivalents)
 
 ## Phase 4 — Optimization
 - [ ] Benchmark suite: single model vs SMR vs best model (success rate, cost, retries)

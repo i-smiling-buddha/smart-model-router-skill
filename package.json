@@ -1,6 +1,6 @@
 {
   "name": "smart-model-router",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Smart Model Router (SMR) — use the cheapest model that can reliably complete the task, escalate only when necessary.",
   "type": "module",
@@ -9,7 +9,7 @@
     "apps/*"
   ],
   "scripts": {
-    "build": "npm run build -w @smr/core && npm run build -w @smr/cli",
+    "build": "npm run build -w @smr/core && npm run build -w @smr/server && npm run build -w @smr/cli",
     "test": "vitest run",
     "smr": "node apps/cli/dist/index.js"
   },

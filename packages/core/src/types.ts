@@ -130,6 +130,8 @@ export interface CandidateScore {
 export interface RoutingDecision {
   taskId: string;
   selectedModel: string;
+  /** Host this decision was made for — later steps of the task reuse it. */
+  host: HostId;
   /** What the host should put in its model field (e.g. "haiku" for Claude Code). */
   hostModel: string;
   mode: RoutingMode;

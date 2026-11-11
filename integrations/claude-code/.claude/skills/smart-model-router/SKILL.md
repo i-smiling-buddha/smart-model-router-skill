@@ -22,7 +22,9 @@ verify, report. Hand the heavy lifting to the routed subagent.
 ## Procedure — for every task the user gives
 
 ### 1. Route (and open a logged task)
-If the `smr` CLI is available (check once: `smr --help`), run:
+If the `smr` MCP tools are available (`smr_task_start`, `smr_verify`, `smr_task_attempt`,
+`smr_task_next`, `smr_task_handoff`), prefer them — same arguments as the CLI below, with
+`host: "claude-code"`. Otherwise, if the `smr` CLI is available (check once: `smr --help`), run:
 
 ```bash
 smr task start --host claude-code --json "<the task, one line>"
@@ -94,8 +96,9 @@ Without the CLI: retry once, then escalate one tier (haiku → sonnet → opus),
 If a subagent replies `ESCALATE:` or the context window is the problem, escalate immediately.
 
 ### 6. Report (short)
-If the subagent result shows token usage, include it when recording
-(`--input-tokens N --output-tokens N`). `smr report` shows per-model pass rate and cost.
+Token usage is captured automatically: the `SubagentStop` hook in `.claude/settings.json` reads
+each `smr-*` subagent's transcript and attaches its tokens to the next recorded attempt.
+`smr report` shows per-model pass rate, tokens and cost.
 End with one line per routed task:
 
 ```

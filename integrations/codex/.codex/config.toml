@@ -1,0 +1,5 @@
+# Smart Model Router — Codex project config
+# MCP server: gives Codex the smr_* tools (route, task_start, verify, task_attempt, task_handoff, report ...)
+[mcp_servers.smr]
+command = "smr"
+args = ["mcp"]

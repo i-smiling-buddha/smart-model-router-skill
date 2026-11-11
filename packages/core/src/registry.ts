@@ -16,7 +16,7 @@ export const DEFAULT_REGISTRY: Registry = RegistrySchema.parse({
       provider: "anthropic",
       displayName: "Claude Haiku 5.5",
       tier: "budget",
-      hostAliases: { "claude-code": "haiku", opencode: "anthropic/claude-haiku-5-5" },
+      hostAliases: { "claude-code": "haiku", opencode: "anthropic/claude-haiku-5-5", codex: "smr-fast" },
       scores: { coding: 70, reasoning: 62, debugging: 60, creative: 62, instructionFollowing: 80, speed: 95 },
       relativeCost: 1,
       capabilities: { toolCalling: true, vision: true },
@@ -26,7 +26,7 @@ export const DEFAULT_REGISTRY: Registry = RegistrySchema.parse({
       provider: "anthropic",
       displayName: "Claude Sonnet 5.5",
       tier: "standard",
-      hostAliases: { "claude-code": "sonnet", opencode: "anthropic/claude-sonnet-5-5" },
+      hostAliases: { "claude-code": "sonnet", opencode: "anthropic/claude-sonnet-5-5", codex: "smr-builder" },
       scores: { coding: 88, reasoning: 82, debugging: 84, creative: 80, instructionFollowing: 90, speed: 75 },
       relativeCost: 3,
       capabilities: { toolCalling: true, vision: true },
@@ -36,7 +36,7 @@ export const DEFAULT_REGISTRY: Registry = RegistrySchema.parse({
       provider: "anthropic",
       displayName: "Claude Opus 5.5",
       tier: "premium",
-      hostAliases: { "claude-code": "opus", opencode: "anthropic/claude-opus-5-5" },
+      hostAliases: { "claude-code": "opus", opencode: "anthropic/claude-opus-5-5", codex: "smr-architect" },
       scores: { coding: 94, reasoning: 93, debugging: 93, creative: 88, instructionFollowing: 93, speed: 55 },
       relativeCost: 5,
       capabilities: { toolCalling: true, vision: true },
@@ -46,7 +46,7 @@ export const DEFAULT_REGISTRY: Registry = RegistrySchema.parse({
       provider: "anthropic",
       displayName: "Claude Fable 5.2",
       tier: "frontier",
-      hostAliases: { "claude-code": "claude-fable-5-2", opencode: "anthropic/claude-fable-5-2" },
+      hostAliases: { "claude-code": "claude-fable-5-2", opencode: "anthropic/claude-fable-5-2", codex: "smr-architect" },
       scores: { coding: 97, reasoning: 97, debugging: 96, creative: 92, instructionFollowing: 94, speed: 40 },
       relativeCost: 10,
       capabilities: { toolCalling: true, vision: true },
@@ -89,7 +89,12 @@ export class ModelRegistry {
   }
 
   get(id: string): ModelSpec | undefined {
-    return this.byId.get(id) ?? this.all().find((m) => Object.values(m.hostAliases).includes(id));
+    return (
+      this.byId.get(id) ??
+      this.all().find((m) => Object.values(m.hostAliases).includes(id)) ??
+      // bare provider model name, e.g. "claude-sonnet-5-5" from a transcript
+      this.all().find((m) => m.id.endsWith("/" + id))
+    );
   }
 
   require(id: string): ModelSpec {

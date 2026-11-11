@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SubagentStop": [
+      {
+        "matcher": "^smr-(fast|builder|architect)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "smr hook subagent-stop",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}
