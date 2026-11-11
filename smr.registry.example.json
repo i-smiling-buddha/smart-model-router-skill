@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "models": [
+    {
+      "id": "anthropic/claude-sonnet-5-5",
+      "provider": "anthropic",
+      "displayName": "Claude Sonnet 5.5",
+      "tier": "standard",
+      "hostAliases": { "claude-code": "sonnet", "opencode": "anthropic/claude-sonnet-5-5" },
+      "scores": { "coding": 88, "reasoning": 82, "debugging": 84, "creative": 80, "instructionFollowing": 90, "speed": 75 },
+      "scoreSource": "initial-estimate",
+      "pricing": { "inputPerMTok": 0, "outputPerMTok": 0 },
+      "relativeCost": 3,
+      "capabilities": { "toolCalling": true, "vision": true },
+      "notes": "Replace the 0 prices with the provider's CURRENT pricing before relying on USD estimates."
+    },
+    {
+      "id": "openrouter/your-provider/your-model",
+      "provider": "openrouter",
+      "displayName": "Example extra model (edit me)",
+      "tier": "budget",
+      "hostAliases": { "opencode": "openrouter/your-provider/your-model" },
+      "scores": { "coding": 65, "reasoning": 60, "debugging": 58, "creative": 60, "instructionFollowing": 75, "speed": 90 },
+      "scoreSource": "initial-estimate",
+      "pricing": null,
+      "relativeCost": 0.5,
+      "capabilities": { "toolCalling": true, "vision": false },
+      "available": false
+    }
+  ]
+}

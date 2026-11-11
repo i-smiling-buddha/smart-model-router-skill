@@ -1,0 +1,16 @@
+{
+  "name": "@smr/cli",
+  "version": "0.1.0",
+  "description": "smr — Smart Model Router command line",
+  "type": "module",
+  "bin": {
+    "smr": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@smr/core": "0.1.0"
+  },
+  "license": "MIT"
+}

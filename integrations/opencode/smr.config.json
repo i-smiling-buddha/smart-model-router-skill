@@ -1,0 +1,8 @@
+{
+  "mode": "smart",
+  "host": "opencode",
+  "approval": "auto",
+  "maxRetriesPerModel": 2,
+  "maxEscalations": 2,
+  "minSuccessProbability": 0.6
+}
