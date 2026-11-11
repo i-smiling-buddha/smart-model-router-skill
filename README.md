@@ -1,4 +1,4 @@
-# Smart Model Router (SMR)
+# Smart Model Router (SMR) Skill
 
 **One Task. Right Model. Better Results.**
 
