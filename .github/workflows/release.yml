@@ -26,19 +26,23 @@ jobs:
           v=$(node -p "require('./package.json').version")
           [ "v$v" = "${GITHUB_REF_NAME}" ] || { echo "tag ${GITHUB_REF_NAME} != package version v$v"; exit 1; }
       - run: node scripts/build-release.mjs --pack
-      - name: Create GitHub release
+      - name: Create or update GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           pre=""
           case "${GITHUB_REF_NAME}" in *-*) pre="--prerelease";; esac
           notes=$(awk -v v="${GITHUB_REF_NAME#v}" '$0 ~ "^## \\[?"v {f=1; next} /^## / && f {exit} f' CHANGELOG.md)
-          gh release create "${GITHUB_REF_NAME}" $pre \
-            --title "Smart Model Router ${GITHUB_REF_NAME}" \
-            --notes "${notes:-See CHANGELOG.md}" \
-            release/smart-model-router-skill.tgz \
-            release/smart-model-router-skill-*.tgz \
-            scripts/install.ps1 scripts/install.sh
+          files="release/smart-model-router-skill.tgz $(ls release/smart-model-router-skill-*.tgz) scripts/install.ps1 scripts/install.sh"
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            # Release was created in the GitHub UI (which also created the tag) — just attach the build.
+            gh release upload "${GITHUB_REF_NAME}" $files --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" $pre \
+              --title "Smart Model Router ${GITHUB_REF_NAME}" \
+              --notes "${notes:-See CHANGELOG.md}" \
+              $files
+          fi
       - name: Publish to npm (only if NPM_TOKEN is configured)
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
