@@ -26,7 +26,7 @@
    powershell -ExecutionPolicy Bypass -File scripts\install.ps1
    ```
 
-   **or from a release**, without cloning:
+   **or from a release** (once one is published on the Releases page), without cloning:
 
    ```powershell
    npm install -g https://github.com/i-smiling-buddha/smart-model-router-skill/releases/latest/download/smart-model-router-skill.tgz

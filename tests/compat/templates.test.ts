@@ -156,6 +156,20 @@ describe("Windows adaptation", () => {
   });
 });
 
+describe("Universal skill (npx skills add)", () => {
+  it("skills/smart-model-router/SKILL.md is a valid, self-contained skill", () => {
+    const md = read(join(ROOT, "skills", "smart-model-router", "SKILL.md"));
+    const fm = frontmatter(md);
+    expect(fm.name).toBe("smart-model-router");
+    expect(fm.description!.length).toBeGreaterThan(50);
+    expect(fm.description!.length).toBeLessThanOrEqual(1024);
+    // works without the CLI: the tier table and the never-below-advanced rule must be in the skill itself
+    expect(md).toMatch(/\| \*\*fast\*\*/);
+    expect(md).toMatch(/never below advanced/i);
+    expect(md).toMatch(/ESCALATE:/);
+  });
+});
+
 describe("Every config file parses", () => {
   it.each(["claude-code", "opencode", "codex"])("%s/smr.config.json", (host) => {
     const c = JSON.parse(read(I(host, "smr.config.json")));
