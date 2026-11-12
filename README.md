@@ -120,6 +120,10 @@ Details: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
 [Install](docs/INSTALL.md) · [Hosts](docs/HOSTS.md) · [Configuration](docs/CONFIG.md) · [Architecture](docs/ARCHITECTURE.md) · [Benchmarks](docs/BENCHMARKS.md) · [Security](SECURITY.md) · [Roadmap](docs/ROADMAP.md) · [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md)
 
+## Contributing
+
+Issues, bug reports, benchmark results and pull requests are welcome. Please never paste API keys, `.env` contents or private code in public issues — `smr doctor` output is safe to share. Report security problems privately (see [SECURITY.md](SECURITY.md)). See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
 ## License
 
 MIT. Made by [Smiling Buddha](https://github.com/i-smiling-buddha) · [DESITechnology](https://desitechnology.com).
