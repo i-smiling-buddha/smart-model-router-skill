@@ -7,6 +7,7 @@
 [![CI](https://github.com/i-smiling-buddha/smart-model-router-skill/actions/workflows/ci.yml/badge.svg)](https://github.com/i-smiling-buddha/smart-model-router-skill/actions/workflows/ci.yml)
 ![license](https://img.shields.io/badge/license-MIT-blue)
 ![node](https://img.shields.io/badge/node-%E2%89%A520-brightgreen)
+[![GitHub stars](https://img.shields.io/github/stars/i-smiling-buddha/smart-model-router-skill?style=social)](https://github.com/i-smiling-buddha/smart-model-router-skill/stargazers)
 
 > Use the cheapest model that can reliably complete the task — and escalate only when necessary.
 
@@ -16,11 +17,12 @@ one fails. The goal is the **minimum cost per *successful* task**, not the minim
 
 हिंदी गाइड: **[README.hi.md](README.hi.md)**
 
-```text
-$ smr route "fix typo in README"                      → haiku   (simple documentation, p≈100%)
-$ smr route "add a dark mode toggle to settings"      → sonnet  (moderate development, p≈99%)
-$ smr route "debug race condition in websocket code"  → opus    (complex debugging, p≈89%)
-$ smr route "security audit of payment gateway"       → opus    (critical — never routed lower)
+![smr routing demo: cheap model for a typo, stronger models for harder work, retry then escalate on failure](docs/assets/smr-demo.gif)
+
+**Try it in 10 seconds** — works in Claude Code, Codex, Cursor, OpenCode and 40+ agents:
+
+```bash
+npx skills add i-smiling-buddha/smart-model-router-skill
 ```
 
 ## Features
@@ -37,19 +39,35 @@ $ smr route "security audit of payment gateway"       → opus    (critical — 
 
 ## Install
 
-**Windows (PowerShell)** — from a clone of this repo:
+### Option 1 — just the skill (any agent, no setup)
+
+```bash
+npx skills add i-smiling-buddha/smart-model-router-skill
+```
+
+Your agent learns to route each task to a fast, standard or advanced model, verify the result and
+escalate only on failure. Nothing else to install.
+
+### Option 2 — the full engine (`smr` CLI)
+
+Adds logging, automatic verification, learning from results, benchmarks, the dashboard, an MCP
+server and ready-made subagents for Claude Code / OpenCode / Codex.
+
+**Windows (PowerShell):**
 
 ```powershell
+git clone https://github.com/i-smiling-buddha/smart-model-router-skill
+cd smart-model-router-skill
 powershell -ExecutionPolicy Bypass -File scripts\install.ps1
 ```
 
 **macOS / Linux:**
 
 ```bash
+git clone https://github.com/i-smiling-buddha/smart-model-router-skill
+cd smart-model-router-skill
 sh scripts/install.sh
 ```
-
-Or install a release package directly: `npm install -g https://github.com/i-smiling-buddha/smart-model-router-skill/releases/latest/download/smart-model-router-skill.tgz`
 
 Requires Node.js 20+ (22.5+ recommended — enables the SQLite log). Full guide: **[docs/INSTALL.md](docs/INSTALL.md)**.
 
@@ -119,6 +137,10 @@ Details: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 ## Documentation
 
 [Install](docs/INSTALL.md) · [Hosts](docs/HOSTS.md) · [Configuration](docs/CONFIG.md) · [Architecture](docs/ARCHITECTURE.md) · [Benchmarks](docs/BENCHMARKS.md) · [Security](SECURITY.md) · [Roadmap](docs/ROADMAP.md) · [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md)
+
+## More free skills by Smiling Buddha
+
+- **[AI Image Recognition Skill](https://github.com/i-smiling-buddha/ai-image-recognition-skill)** — stop guessing from previews: your agent checks real transparency (catches fake checkerboards), true format, size/DPI, colors, blur and GPS metadata in the actual image file. `npx skills add i-smiling-buddha/ai-image-recognition-skill`
 
 ## Contributing
 

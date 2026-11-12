@@ -15,7 +15,17 @@ fail होने पर ही stronger model पर जाता है। ल
 **Status:** v1.0.0-rc.1 (release candidate) — पाँचों phases पूरे: Core Engine, Intelligence, Universal Integration, Optimization, Release।
 Claude Code, OpenCode, Codex, किसी भी MCP host, local HTTP API, और सीधे provider APIs (Anthropic / OpenAI / OpenRouter / Gemini / Ollama) पर चलता है।
 
-## Install (Windows)
+![smr routing demo](docs/assets/smr-demo.gif)
+
+## सबसे आसान install (कोई भी agent, 10 seconds)
+
+```bash
+npx skills add i-smiling-buddha/smart-model-router-skill
+```
+
+इससे आपका agent हर task को fast, standard या advanced model पर भेजना, result verify करना और fail होने पर ही escalate करना सीख जाता है। Logging, learning, dashboard और MCP server वाला पूरा engine चाहिए तो नीचे वाला तरीका इस्तेमाल करें।
+
+## Full engine install (Windows)
 
 ```powershell
 # repo clone करके:
@@ -310,6 +320,10 @@ smart-model-router/
 - Automatic token capture अभी सिर्फ Claude Code में है (SubagentStop hook)। OpenCode/Codex में
   tokens `--input-tokens/--output-tokens` या `smr_task_attempt` से record होते हैं; `smr exec`
   हर host पर usage खुद log करता है।
+
+## Smiling Buddha की और free skills
+
+- **[AI Image Recognition Skill](https://github.com/i-smiling-buddha/ai-image-recognition-skill)** — preview देखकर अंदाज़ा मत लगाइए: आपका agent असली image file में transparency (नकली checkerboard भी पकड़ता है), असली format, size/DPI, colors, blur और GPS metadata check करता है। `npx skills add i-smiling-buddha/ai-image-recognition-skill`
 
 ## Contributing
 
