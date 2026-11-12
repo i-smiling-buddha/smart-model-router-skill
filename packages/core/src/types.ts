@@ -51,7 +51,7 @@ export const ModelSpecSchema = z.object({
   displayName: z.string().min(1),
   tier: z.enum(["budget", "standard", "premium", "frontier"]),
   /** How each host refers to this model (Claude Code alias, OpenCode provider/model id ...). */
-  hostAliases: z.record(z.string()).default({}),
+  hostAliases: z.record(z.string(), z.string()).default({}),
   scores: z.object({
     coding: ScoreSchema,
     reasoning: ScoreSchema,

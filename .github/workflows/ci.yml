@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }}, Node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - name: Build release bundle
+        run: node scripts/build-release.mjs --pack
+      - name: E2E tests against the release bundle
+        shell: bash
+        run: SMR_BIN="$PWD/release/smart-model-router-skill/dist/smr.mjs" npx vitest run tests/compat/cli-e2e.test.ts
+      - name: Dependency audit
+        if: matrix.os == 'ubuntu-latest' && matrix.node == 22
+        run: npm audit --audit-level=high
+      - uses: actions/upload-artifact@v4
+        if: matrix.os == 'ubuntu-latest' && matrix.node == 22
+        with:
+          name: release-package
+          path: release/smart-model-router-skill.tgz
+
+  node20-runtime:
+    # The CLI supports Node 20 (JSON log fallback). Dev tooling needs 22+, so test the installed package.
+    name: Runtime on Node 20 (${{ matrix.os }})
+    needs: test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-package
+          path: release
+      - run: npm install -g ./release/smart-model-router-skill.tgz
+      - run: node scripts/smoke.mjs
+
+  windows-installer:
+    name: Windows installer (install.ps1)
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run installer from source
+        shell: pwsh
+        run: ./scripts/install.ps1 -FromSource
+      - name: Smoke test the installed smr
+        run: node scripts/smoke.mjs
+      - name: Windows MCP configs use cmd /c
+        shell: pwsh
+        run: |
+          $d = Join-Path $env:RUNNER_TEMP "proj"
+          smr init claude-code $d
+          $m = Get-Content (Join-Path $d ".mcp.json") -Raw | ConvertFrom-Json
+          if ($m.mcpServers.smr.command -ne "cmd") { throw "expected cmd /c wrapper on Windows" }
+          Push-Location $d; smr doctor; if ($LASTEXITCODE -ne 0) { throw "doctor failed" }; Pop-Location

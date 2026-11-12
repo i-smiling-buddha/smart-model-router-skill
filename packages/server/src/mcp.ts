@@ -10,12 +10,12 @@ import { OPERATIONS, runOperation, type ApiContext } from "./api.js";
  * stdout carries protocol messages ONLY — all logging goes to stderr.
  */
 
-const SERVER_INFO = { name: "smart-model-router", version: "0.4.0" };
+const SERVER_INFO = { name: "smart-model-router", version: "1.0.0-rc.1" };
 const DEFAULT_PROTOCOL = "2025-06-18";
 
 interface RpcRequest { jsonrpc: "2.0"; id?: string | number | null; method: string; params?: any }
 
-export async function handleMcpMessage(ctx: ApiContext, msg: RpcRequest): Promise<object | undefined> {
+export async function handleMcpMessage(ctx: ApiContext, msg: RpcRequest, version = SERVER_INFO.version): Promise<object | undefined> {
   const isNotification = msg.id === undefined || msg.id === null;
   const ok = (result: unknown) => ({ jsonrpc: "2.0", id: msg.id, result });
   const err = (code: number, message: string) => ({ jsonrpc: "2.0", id: msg.id ?? null, error: { code, message } });
@@ -25,7 +25,7 @@ export async function handleMcpMessage(ctx: ApiContext, msg: RpcRequest): Promis
       return ok({
         protocolVersion: msg.params?.protocolVersion ?? DEFAULT_PROTOCOL,
         capabilities: { tools: { listChanged: false } },
-        serverInfo: SERVER_INFO,
+        serverInfo: { ...SERVER_INFO, version },
         instructions:
           "Smart Model Router: call smr_task_start before delegating work, smr_verify after it, and follow the returned next.action (retry / escalate / stop / complete).",
       });
@@ -56,7 +56,7 @@ function toStructured(r: unknown): Record<string, unknown> | undefined {
   return { result: r };
 }
 
-export function runMcpStdio(ctx: ApiContext, input: Readable = process.stdin, output: Writable = process.stdout): Promise<void> {
+export function runMcpStdio(ctx: ApiContext, input: Readable = process.stdin, output: Writable = process.stdout, version?: string): Promise<void> {
   const rl = createInterface({ input, crlfDelay: Infinity });
   const write = (o: object) => output.write(JSON.stringify(o) + "\n");
   let queue = Promise.resolve();
@@ -70,7 +70,7 @@ export function runMcpStdio(ctx: ApiContext, input: Readable = process.stdin, ou
     // Keep responses in order; one slow tool call doesn't reorder replies.
     queue = queue.then(async () => {
       try {
-        const res = await handleMcpMessage(ctx, msg);
+        const res = await handleMcpMessage(ctx, msg, version);
         if (res) write(res);
       } catch (e) {
         write({ jsonrpc: "2.0", id: msg.id ?? null, error: { code: -32603, message: (e as Error).message } });

@@ -1,8 +1,8 @@
 {
   "name": "smart-model-router",
-  "version": "0.4.0",
+  "version": "1.0.0-rc.1",
   "private": true,
-  "description": "Smart Model Router (SMR) — use the cheapest model that can reliably complete the task, escalate only when necessary.",
+  "description": "Smart Model Router — routes every coding task to the cheapest AI model that can reliably do it, verifies the result, and escalates only when needed. Works with Claude Code, OpenCode, Codex and any MCP host.",
   "type": "module",
   "workspaces": [
     "packages/*",
@@ -11,15 +11,43 @@
   "scripts": {
     "build": "npm run build -w @smr/core && npm run build -w @smr/server && npm run build -w @smr/cli",
     "test": "vitest run",
-    "smr": "node apps/cli/dist/index.js"
+    "smr": "node apps/cli/dist/index.js",
+    "release:build": "npm run build && node scripts/build-release.mjs",
+    "release:pack": "npm run build && node scripts/build-release.mjs --pack"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "typescript": "^5.6.0",
-    "vitest": "^2.1.0"
+    "esbuild": "^0.28.2",
+    "typescript": "^5.9.3",
+    "vitest": "^5.1.0"
   },
   "engines": {
     "node": ">=20"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "keywords": [
+    "ai",
+    "llm",
+    "model-router",
+    "claude-code",
+    "opencode",
+    "codex",
+    "mcp",
+    "cost-optimization",
+    "tokens",
+    "vibe-coding",
+    "anthropic",
+    "openai",
+    "openrouter",
+    "ollama"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/i-smiling-buddha/smart-model-router-skill.git"
+  },
+  "homepage": "https://github.com/i-smiling-buddha/smart-model-router-skill#readme",
+  "bugs": {
+    "url": "https://github.com/i-smiling-buddha/smart-model-router-skill/issues"
+  },
+  "author": "Smiling Buddha (https://github.com/i-smiling-buddha)"
 }

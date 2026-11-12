@@ -57,5 +57,16 @@
 - [ ] Usage-over-time chart in the dashboard
 - [ ] Real (non-simulated) benchmark run on the starter suite, published in docs
 
-## Phase 5 — Release
-- [ ] Windows installer, docs, security audit, open-source release
+## ✅ Phase 5 — Release — done (1.0.0-rc.1)
+- [x] Single-file bundle + npm package `smart-model-router-skill`
+- [x] Windows installer (`install.ps1`) + macOS/Linux installer; `smr doctor`; Windows-safe MCP configs
+- [x] Security audit + fixes (see SECURITY.md); 0 known dependency vulnerabilities
+- [x] Integration compatibility tests (all host templates) + CLI e2e on the release bundle; Node 20 smoke test
+- [x] CI matrix (Windows/macOS/Linux × Node 20/22/24) + tag-based release workflow
+- [x] Docs: English README, Hindi guide, install, hosts, config, architecture, benchmarks, security, changelog, contributing, MIT license
+
+## Before 1.0.0
+- [ ] First green CI run on Windows (installer job) and macOS
+- [ ] Real (non-simulated) starter-suite benchmark, results in docs/BENCHMARKS.md
+- [ ] Verify Codex agent model names
+- [ ] Live test of `smr exec` / `--llm` against each provider

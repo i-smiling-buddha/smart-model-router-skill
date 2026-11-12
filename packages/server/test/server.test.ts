@@ -68,8 +68,26 @@ describe("HTTP server", () => {
     expect((await call("POST", "/tasks/route", {})).status).toBe(400);
     expect((await call("GET", "/tasks/nope/next")).status).toBe(404);
     expect((await call("GET", "/nothing")).status).toBe(404);
-    const bad = await fetch(url + "/tasks/route", { method: "POST", body: "{not json" });
+    const bad = await fetch(url + "/tasks/route", { method: "POST", headers: { "content-type": "application/json" }, body: "{not json" });
     expect(bad.status).toBe(400);
+  });
+
+  it("refuses browser-style attacks: cross-origin, DNS rebinding, simple-request CSRF", async () => {
+    const body = JSON.stringify({ task: "x" });
+    // a web page posting text/plain (no CORS preflight) — must not reach the API
+    expect((await fetch(url + "/tasks/execute", { method: "POST", headers: { "content-type": "text/plain" }, body })).status).toBe(415);
+    // cross-site origin
+    expect((await fetch(url + "/tasks/route", { method: "POST", headers: { "content-type": "application/json", origin: "https://evil.example" }, body })).status).toBe(403);
+    expect((await fetch(url + "/models", { headers: { origin: "null" } })).status).toBe(403);
+    // same-machine origin is fine
+    expect((await fetch(url + "/models", { headers: { origin: url } })).status).toBe(200);
+    // DNS rebinding: attacker domain resolving to 127.0.0.1 keeps its own Host header
+    const { request } = await import("node:http");
+    const status = await new Promise<number>((resolve) => {
+      const u = new URL(url);
+      request({ host: u.hostname, port: u.port, path: "/models", headers: { host: "evil.example:" + u.port } }, (r) => { r.resume(); resolve(r.statusCode!); }).end();
+    });
+    expect(status).toBe(403);
   });
 
   it("serves the HTML dashboard", async () => {

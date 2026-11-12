@@ -223,9 +223,18 @@ export async function runBenchmark(
     providers?: ProviderRegistry;
     policy?: EscalationPolicy;
     simulate?: { seed?: number };
+    /** node-test cases execute model-written code locally — must be explicitly allowed. */
+    allowCodeExecution?: boolean;
     onProgress?: (r: CaseResult) => void;
   },
 ): Promise<BenchmarkReport> {
+  const codeCases = suite.cases.filter((c) => c.verify.type === "node-test");
+  if (!opts.simulate && codeCases.length && !opts.allowCodeExecution) {
+    throw new Error(
+      `Suite "${suite.name}" has ${codeCases.length} node-test case(s) that RUN MODEL-WRITTEN CODE on this machine ` +
+        `(temp folder, timeout). Re-run with --allow-code-exec if you trust the suite, or use --simulate.`,
+    );
+  }
   const registry = opts.registry ?? new ModelRegistry();
   const sim = opts.simulate ? simulatedProviders(registry, opts.simulate.seed ?? 42) : undefined;
   const providers = sim?.providers ?? opts.providers ?? ProviderRegistry.defaults();
@@ -307,8 +316,10 @@ function compare(smr: StrategySummary, b: StrategySummary): Comparison {
   const why = !okSuccess
     ? `SMR succeeded on ${Math.abs(successDeltaPts)} pts fewer tasks — savings don't count if tasks fail`
     : okCost
-      ? `same-or-better success at ${Math.abs(costDeltaPct)}% ${costDeltaPct <= 0 ? "lower" : "higher"} cost`
-      : `higher success (+${successDeltaPts} pts) for ${costDeltaPct}% more cost`;
+      ? `same-or-better success at ${Math.abs(costDeltaPct)}% lower cost`
+      : successDeltaPts > 0
+        ? `higher success (+${successDeltaPts} pts) for ${costDeltaPct}% more cost`
+        : `same success but ${costDeltaPct}% more cost — routing/escalation overhead outweighed the savings`;
   return { baseline: b.strategy, successDeltaPts, costDeltaPct, tokenDeltaPct, verdict, why };
 }
 

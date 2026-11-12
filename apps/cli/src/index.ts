@@ -44,6 +44,8 @@ import {
   type TaskClassification,
 } from "@smr/core";
 import { createContext, runMcpStdio, startHttpServer } from "@smr/server";
+import { runDoctor } from "./doctor.js";
+import { adaptTemplate } from "./templates.js";
 
 const HELP = `smr — Smart Model Router  (use the cheapest model that can reliably do the job)
 
@@ -74,7 +76,7 @@ Universal integration:
   smr hook subagent-stop                          Claude Code SubagentStop hook: captures subagent token usage
 
 Optimization (Phase 4):
-  smr bench [suite.json] [--strategies smr,best,single:<model>] [--simulate] [--seed N] [--import]
+  smr bench [suite.json] [--strategies smr,best,single:<model>] [--simulate] [--seed N] [--import] [--allow-code-exec]
       single model vs SMR vs best model — success, cost, tokens, retries; saved to .smr/benchmarks/
       (real runs need API keys; node-test cases execute model-written code locally)
   smr learn [--json]                              prior vs observed vs blended success per model × task type
@@ -83,7 +85,9 @@ Optimization (Phase 4):
 
 Reporting / setup:
   smr report [--json]
-  smr init <claude-code|opencode|codex> [targetDir]
+  smr init <claude-code|opencode|codex> [targetDir] [--platform windows|posix]
+  smr doctor [--json]                             check Node, SQLite, PATH, config, keys, installed integrations
+  smr --version
 
 Options:
   --registry <file>   custom registry JSON (merged over defaults)
@@ -93,6 +97,21 @@ Options:
 `;
 
 type Flags = Record<string, string | boolean | string[]>;
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+/** Templates/suites live next to the bundle (release package) or at the repo root (monorepo dev). */
+function assetDir(name: string): string {
+  const candidates = [join(HERE, "..", name), join(HERE, "..", "..", "..", name)];
+  return candidates.find((p) => existsSync(p)) ?? candidates[0]!;
+}
+const VERSION: string = (() => {
+  if (process.env.SMR_VERSION) return process.env.SMR_VERSION;
+  for (const p of [join(HERE, "..", "package.json"), join(HERE, "..", "..", "..", "package.json")]) {
+    try { return JSON.parse(readFileSync(p, "utf8")).version as string; } catch { /* next */ }
+  }
+  return "dev";
+})();
+
 
 const REPEATABLE = new Set(["constraint", "file", "dir"]);
 
@@ -133,6 +152,7 @@ async function main(): Promise<void> {
   const [cmd, ...rest] = process.argv.slice(2);
   const { positional, flags } = parseArgs(rest);
   if (!cmd || cmd === "help" || cmd === "--help" || flags.help) { console.log(HELP); return; }
+  if (cmd === "--version" || cmd === "-v" || cmd === "version") { console.log(VERSION); return; }
 
   const cfg = loadConfig(flags);
   const registry = registryFor(cfg, str(flags.registry));
@@ -312,7 +332,7 @@ async function main(): Promise<void> {
       }
       case "mcp": {
         // stdout belongs to the protocol — never console.log here.
-        await runMcpStdio(createContext(cfg, { registry }));
+        await runMcpStdio(createContext(cfg, { registry }), undefined, undefined, VERSION);
         return;
       }
       case "serve": {
@@ -339,8 +359,7 @@ async function main(): Promise<void> {
         return;
       }
       case "bench": {
-        const here = dirname(fileURLToPath(import.meta.url));
-        const suitePath = positional[0] ?? join(here, "..", "..", "..", "benchmarks", "suites", "starter.json");
+        const suitePath = positional[0] ?? join(assetDir("benchmarks"), "suites", "starter.json");
         if (!existsSync(suitePath)) fail(`suite not found: ${suitePath}`);
         const suite = JSON.parse(readFileSync(suitePath, "utf8")) as BenchmarkSuite;
         const standard = registry.available().find((m) => m.tier === "standard")?.id ?? registry.available()[0]!.id;
@@ -348,7 +367,7 @@ async function main(): Promise<void> {
         const simulate = flags.simulate ? { seed: num(flags.seed) ?? 42 } : undefined;
         if (!json) console.error(`benchmark "${suite.name}": ${suite.cases.length} cases × ${strategies.length} strategies${simulate ? "  [SIMULATED — demo data, not a real measurement]" : ""}`);
         const report = await runBenchmark(suite, {
-          strategies, registry, policy, simulate,
+          strategies, registry, policy, simulate, allowCodeExecution: !!flags["allow-code-exec"],
           onProgress: json ? undefined : (r) => console.error(`  ${r.passed ? "✓" : "✗"} ${r.strategy.padEnd(36)} ${r.caseId.padEnd(24)} ${r.modelsUsed.map((m) => m.replace(/^[^/]+\//, "")).join("→")}`),
         });
         const dir = join(storeDir, "benchmarks");
@@ -400,13 +419,23 @@ async function main(): Promise<void> {
         console.log(`dashboard: ${file}`);
         return;
       }
+      case "doctor": {
+        const checks = await runDoctor(cfg, storeDir, str(flags.config) ?? "smr.config.json", registry);
+        const bad = checks.some((c) => c.level === "fail");
+        out({ version: VERSION, ok: !bad, checks }, () =>
+          [`smr ${VERSION} — doctor`, ...checks.map((c) => `${c.level === "ok" ? "✓" : c.level === "warn" ? "⚠" : c.level === "info" ? "·" : "✗"} ${c.name}: ${c.detail}`),
+           "", bad ? "Some checks FAILED — fix the ✗ items above." : "All required checks passed."].join("\n"));
+        if (bad) process.exitCode = 1;
+        return;
+      }
       case "init": {
         const target = positional[0];
-        if (target !== "claude-code" && target !== "opencode" && target !== "codex") fail("usage: smr init <claude-code|opencode|codex> [targetDir]");
+        if (target !== "claude-code" && target !== "opencode" && target !== "codex") fail("usage: smr init <claude-code|opencode|codex> [targetDir] [--platform windows|posix]");
         const dest = resolve(positional[1] ?? ".");
-        const here = dirname(fileURLToPath(import.meta.url));
-        const src = join(here, "..", "..", "..", "integrations", target);
+        const src = join(assetDir("integrations"), target);
         if (!existsSync(src)) fail(`integration templates not found at ${src}`);
+        const platformFlag = str(flags.platform);
+        const platform = platformFlag === "windows" ? "win32" : platformFlag === "posix" ? "linux" : process.platform;
         const created: string[] = [];
         const skipped: string[] = [];
         const walk = (rel: string) => {
@@ -415,7 +444,7 @@ async function main(): Promise<void> {
           const to = join(dest, rel);
           if (existsSync(to)) { skipped.push(rel); return; }
           mkdirSync(dirname(to), { recursive: true });
-          cpSync(from, to);
+          writeFileSync(to, adaptTemplate(rel, readFileSync(from, "utf8"), platform));
           created.push(rel);
         };
         walk("");

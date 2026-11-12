@@ -6,3 +6,4 @@ dist/
 smr.registry.json
 *.log
 .smr/
+release/
