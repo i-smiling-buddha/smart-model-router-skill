@@ -311,6 +311,10 @@ smart-model-router/
   tokens `--input-tokens/--output-tokens` या `smr_task_attempt` से record होते हैं; `smr exec`
   हर host पर usage खुद log करता है।
 
+## Contributing
+
+Issues, bug reports, benchmark results और pull requests का स्वागत है। कृपया public issues में कभी भी API keys, `.env` का content या private code न डालें — `smr doctor` का output share करना safe है। Security से जुड़ी समस्याएँ private तरीके से report करें ([SECURITY.md](SECURITY.md) देखें)। Guidelines के लिए [CONTRIBUTING.md](CONTRIBUTING.md) देखें।
+
 ## License
 
 MIT. Made by [Smiling Buddha](https://github.com/i-smiling-buddha) · [DESITechnology](https://desitechnology.com).
