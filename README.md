@@ -122,4 +122,4 @@ Details: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
 ## License
 
-[MIT](LICENSE)
+MIT. Made by [Smiling Buddha](https://github.com/i-smiling-buddha) · [DESITechnology](https://desitechnology.com).
