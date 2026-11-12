@@ -109,6 +109,11 @@ describe.each(stores)("Execution store (%s) + retry management", (_name, make) =
 
     expect(s.handoff(t.id, { constraints: ["Keep theme API"] })).toContain("Keep theme API");
     expect(() => store.addAttempt({ taskId: "nope", modelId: OPUS, passed: true })).toThrow();
+    // secrets never land in the log
+    const secretTask = store.createTask("deploy with key sk-ant-abcdefghijklmnop12345", t.classification, t.decision);
+    expect(secretTask.text).not.toContain("sk-ant-abcdefghijklmnop12345");
+    const sa = store.addAttempt({ taskId: t.id, modelId: OPUS, passed: false, failureReason: "auth failed for token: ghp_abcdefghijklmnopqrstuvwx" });
+    expect(store.getTask(t.id)!.attempts.find((x) => x.id === sa.id)!.failureReason).not.toContain("ghp_abcdefghijklmnopqrstuvwx");
     store.cacheSet("k", "v");
     expect(store.cacheGet("k")).toBe("v");
     store.close();

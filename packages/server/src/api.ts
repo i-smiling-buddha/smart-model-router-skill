@@ -183,7 +183,7 @@ export const OPERATIONS = [
   op({
     name: "smr_models",
     description: "List models in the registry with tier, relative cost and capability scores.",
-    input: z.object({}).passthrough(),
+    input: z.looseObject({}),
     jsonSchema: obj({}),
     run: async (ctx) => ctx.registry.all().map((m) => ({ id: m.id, tier: m.tier, available: m.available, relativeCost: m.relativeCost, pricing: m.pricing, scores: m.scores, scoreSource: m.scoreSource, hostAliases: m.hostAliases })),
   }),
@@ -219,7 +219,7 @@ export const OPERATIONS = [
   op({
     name: "smr_learn",
     description: "Learning Engine view: per model × task type, the registry prior, the observed pass rate and the blended probability the router now uses.",
-    input: z.object({}).passthrough(),
+    input: z.looseObject({}),
     jsonSchema: obj({}),
     run: async (ctx) => learningReport(ctx.store(), ctx.registry, ctx.cfg.learning),
   }),

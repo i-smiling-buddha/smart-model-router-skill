@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
+import { redactSecrets } from "./handoff.js";
 import type { RoutingDecision, TaskCategory, TaskClassification } from "./types.js";
 
 /**
@@ -72,6 +73,9 @@ export interface ExecutionStore {
 
 export const newTaskId = () => "t_" + Date.now().toString(36) + randomBytes(3).toString("hex");
 const now = () => new Date().toISOString();
+/** Owner-only on POSIX (Windows ignores the mode; the folder lives in the user's project). */
+const privateDir = (dir: string) => mkdirSync(dir, { recursive: true, mode: 0o700 });
+const clean = (s: string | undefined) => (s === undefined ? undefined : redactSecrets(s));
 
 /* ------------------------------------------------------------------ */
 /* Shared aggregate logic                                              */
@@ -163,11 +167,12 @@ export class JsonStore implements ExecutionStore {
 
   private save() {
     if (!this.file) return;
-    mkdirSync(dirname(this.file), { recursive: true });
+    privateDir(dirname(this.file));
     writeFileSync(this.file, JSON.stringify(this.data, null, 1));
   }
 
   createTask(text: string, classification: TaskClassification, decision: RoutingDecision): TaskRecord {
+    text = redactSecrets(text);
     const t: TaskRecord = {
       id: newTaskId(), text, category: classification.category, complexity: classification.complexity,
       riskLevel: classification.riskLevel, classification, decision, status: "open", createdAt: now(), updatedAt: now(),
@@ -184,7 +189,8 @@ export class JsonStore implements ExecutionStore {
 
   addAttempt(a: Omit<AttemptRow, "id" | "createdAt">): AttemptRow {
     if (!this.data.tasks.some((t) => t.id === a.taskId)) throw new Error(`Unknown task id: ${a.taskId}`);
-    const row: AttemptRow = { ...a, id: this.data.attempts.length + 1, createdAt: now() };
+    const row: AttemptRow = { ...a, failureReason: clean(a.failureReason), id: this.data.attempts.length + 1, createdAt: now() };
+    if (row.failureReason === undefined) delete row.failureReason;
     this.data.attempts.push(row);
     this.save();
     return row;
@@ -239,7 +245,7 @@ export class SqliteStore implements ExecutionStore {
   private db: Db;
 
   constructor(file: string, Database: new (path: string) => Db) {
-    if (file !== ":memory:") mkdirSync(dirname(file), { recursive: true });
+    if (file !== ":memory:") privateDir(dirname(file));
     this.db = new Database(file);
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS tasks (
@@ -257,6 +263,7 @@ export class SqliteStore implements ExecutionStore {
   }
 
   createTask(text: string, classification: TaskClassification, decision: RoutingDecision): TaskRecord {
+    text = redactSecrets(text);
     const t: TaskRecord = {
       id: newTaskId(), text, category: classification.category, complexity: classification.complexity,
       riskLevel: classification.riskLevel, classification, decision, status: "open", createdAt: now(), updatedAt: now(),
@@ -298,8 +305,10 @@ export class SqliteStore implements ExecutionStore {
     const createdAt = now();
     const res = this.db
       .prepare(`INSERT INTO attempts (task_id, model_id, passed, failure_reason, input_tokens, output_tokens, cost_usd, cost_units, duration_ms, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`)
-      .run(a.taskId, a.modelId, a.passed ? 1 : 0, a.failureReason ?? null, a.inputTokens ?? null, a.outputTokens ?? null, a.costUsd ?? null, a.costUnits ?? null, a.durationMs ?? null, createdAt);
-    return { ...a, id: Number(res.lastInsertRowid), createdAt };
+      .run(a.taskId, a.modelId, a.passed ? 1 : 0, clean(a.failureReason) ?? null, a.inputTokens ?? null, a.outputTokens ?? null, a.costUsd ?? null, a.costUnits ?? null, a.durationMs ?? null, createdAt);
+    const row: AttemptRow = { ...a, failureReason: clean(a.failureReason), id: Number(res.lastInsertRowid), createdAt };
+    if (row.failureReason === undefined) delete row.failureReason;
+    return row;
   }
 
   setStatus(id: string, status: TaskStatus) {

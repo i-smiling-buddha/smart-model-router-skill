@@ -1,0 +1,49 @@
+name: Release
+
+# Push a tag like v1.0.0 (or v1.0.0-rc.1 for a pre-release) to publish.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - name: Check tag matches package version
+        run: |
+          v=$(node -p "require('./package.json').version")
+          [ "v$v" = "${GITHUB_REF_NAME}" ] || { echo "tag ${GITHUB_REF_NAME} != package version v$v"; exit 1; }
+      - run: node scripts/build-release.mjs --pack
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pre=""
+          case "${GITHUB_REF_NAME}" in *-*) pre="--prerelease";; esac
+          notes=$(awk -v v="${GITHUB_REF_NAME#v}" '$0 ~ "^## \\[?"v {f=1; next} /^## / && f {exit} f' CHANGELOG.md)
+          gh release create "${GITHUB_REF_NAME}" $pre \
+            --title "Smart Model Router ${GITHUB_REF_NAME}" \
+            --notes "${notes:-See CHANGELOG.md}" \
+            release/smart-model-router-skill.tgz \
+            release/smart-model-router-skill-*.tgz \
+            scripts/install.ps1 scripts/install.sh
+      - name: Publish to npm (only if NPM_TOKEN is configured)
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        if: env.NODE_AUTH_TOKEN != ''
+        run: |
+          tag=latest
+          case "${GITHUB_REF_NAME}" in *-*) tag=next;; esac
+          npm publish release/smart-model-router-skill --access public --tag "$tag"

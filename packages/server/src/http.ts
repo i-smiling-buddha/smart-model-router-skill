@@ -33,10 +33,34 @@ const ROUTES: Route[] = [
   { method: "POST", pattern: /^\/tasks\/([\w-]+)\/handoff$/, op: "smr_task_handoff", build: (m, b) => ({ ...b, taskId: m[1] }) },
 ];
 
+const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
+
+/**
+ * Browser-attack guards (a web page you visit can send requests to 127.0.0.1):
+ *  - Host must be a loopback name      → blocks DNS-rebinding
+ *  - Origin, if present, must be local → blocks cross-site requests
+ *  - POST bodies must be application/json → forces a CORS preflight, which we never approve
+ */
+export function rejectUnsafe(req: IncomingMessage): { status: number; error: string } | undefined {
+  const hostName = (req.headers.host ?? "").replace(/:\d+$/, "").toLowerCase();
+  if (!LOCAL_HOSTS.has(hostName)) return { status: 403, error: "forbidden host" };
+  const origin = req.headers.origin;
+  if (origin && origin !== "null") {
+    try {
+      if (!LOCAL_HOSTS.has(new URL(origin).hostname.toLowerCase())) return { status: 403, error: "cross-origin request refused" };
+    } catch { return { status: 403, error: "bad origin" }; }
+  } else if (origin === "null") return { status: 403, error: "cross-origin request refused" };
+  if (req.method === "POST" && !/^application\/json\b/i.test(req.headers["content-type"] ?? "")) return { status: 415, error: "content-type must be application/json" };
+  if (req.method !== "GET" && req.method !== "POST") return { status: 405, error: "method not allowed" };
+  return undefined;
+}
+
 export function createHttpServer(ctx: ApiContext, opts: { token?: string } = {}): Server {
   const token = opts.token ?? process.env.SMR_API_TOKEN;
   return createServer(async (req, res) => {
     try {
+      const unsafe = rejectUnsafe(req);
+      if (unsafe) return send(res, unsafe.status, { error: unsafe.error });
       const url = new URL(req.url ?? "/", "http://localhost");
       if (req.method === "GET" && url.pathname === "/health") return send(res, 200, { ok: true, service: "smart-model-router", store: ctx.store().backend });
       if (token && !authorized(req, token)) return send(res, 401, { error: "unauthorized" });
@@ -104,6 +128,6 @@ function readJson(req: IncomingMessage): Promise<unknown> {
 }
 
 function send(res: ServerResponse, status: number, body: unknown) {
-  res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
+  res.writeHead(status, { "content-type": "application/json; charset=utf-8", "x-content-type-options": "nosniff", "cache-control": "no-store" });
   res.end(JSON.stringify(body));
 }

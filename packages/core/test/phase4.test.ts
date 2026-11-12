@@ -173,6 +173,13 @@ describe("Benchmark engine", () => {
     expect(cmp.verdict).toBe("fail");
   });
 
+  it("refuses to run model-written code unless explicitly allowed", async () => {
+    const code: BenchmarkSuite = { name: "code", cases: [{ id: "c", task: "write add(a,b)", verify: { type: "node-test", test: "add(1,2)" } }] };
+    await expect(runBenchmark(code, { strategies: [parseStrategy("smr")], providers: new ProviderRegistry([]) })).rejects.toThrow(/allow-code-exec/);
+    // simulation never executes code, so it is allowed
+    await expect(runBenchmark(code, { strategies: [parseStrategy("smr")], simulate: { seed: 1 } })).resolves.toBeTruthy();
+  });
+
   it("simulation is deterministic per seed and clearly marked", async () => {
     const a = await runBenchmark(suite, { strategies: [parseStrategy("smr")], simulate: { seed: 3 } });
     const b = await runBenchmark(suite, { strategies: [parseStrategy("smr")], simulate: { seed: 3 } });
