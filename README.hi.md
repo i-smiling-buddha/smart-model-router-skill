@@ -326,6 +326,7 @@ smart-model-router/
 - **[AI Image Recognition Skill](https://github.com/i-smiling-buddha/ai-image-recognition-skill)** — preview देखकर अंदाज़ा मत लगाइए: आपका agent असली image file में transparency (नकली checkerboard भी पकड़ता है), असली format, size/DPI, colors, blur और GPS metadata check करता है। `npx skills add i-smiling-buddha/ai-image-recognition-skill`
 - **[Reflection Skill](https://github.com/i-smiling-buddha/reflection-skill)** — किसी भी app, website, game या software का clean-room तरीके से अपना version बनाइए: आपका agent उसे बाहर से study करता है, हर screen, flow और data table map करता है, फिर आपके अपने brand के साथ बेहतर version बनाता है। `npx skills add i-smiling-buddha/reflection-skill`
 - **[PPT Animation Skill](https://github.com/i-smiling-buddha/ppt-animation-skill)** — किसी भी topic को Kurzgesagt-style animated explainer video में बदलिए: आपका agent script लिखता है, offline Hindi/English voiceover बनाता है, हर scene को SVG में animate करता है और 1080p MP4 render करता है, बिना किसी paid API के। `npx skills add i-smiling-buddha/ppt-animation-skill`
+- **[Countdown Video Skill](https://github.com/i-smiling-buddha/countdown-video-skill)** — कुछ भी rank करके countdown बनाइए: आपका agent sources के साथ ranking research करता है, फिर animated cards, trailer clips, music और YouTube chapters के साथ Top-N countdown या साल-दर-साल evolution videos render करता है। `npx skills add i-smiling-buddha/countdown-video-skill`
 
 ## Contributing
 
